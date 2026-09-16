@@ -1,0 +1,30 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.tmp
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Power BI local artifacts
+*.pbix
+*.pbit
+*.pbip
+*.Report/
+*.SemanticModel/
+
+# Large slide decks — keep local / LFS outside default clone
+*.pptx
+*.pptm
+
+# Optional pristine backup (local only)
+data/_pristine_*.xlsx
+
+# Agent / Cursor local
+.cursor/

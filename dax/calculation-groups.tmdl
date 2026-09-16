@@ -1,0 +1,95 @@
+/// Time Intelligence calculation group for Northwind DW
+/// Create via Model view → Calculation group, or paste/apply in TMDL view.
+/// Requires: Discourage implicit measures = true
+/// Mark DimDate[Date] as Date Table first.
+///
+/// Docs: https://learn.microsoft.com/power-bi/transform-model/calculation-groups
+
+createOrReplace
+
+	table 'Time Intelligence'
+		calculationGroup
+			precedence: 10
+
+			calculationItem Current =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    SELECTEDMEASURE (),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem MTD =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    CALCULATE ( SELECTEDMEASURE (), DATESMTD ( DimDate[Date] ) ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem QTD =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    CALCULATE ( SELECTEDMEASURE (), DATESQTD ( DimDate[Date] ) ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem YTD =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    CALCULATE ( SELECTEDMEASURE (), DATESYTD ( DimDate[Date] ) ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem PY =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( DimDate[Date] ) ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem YOY =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    SELECTEDMEASURE ()
+				        - CALCULATE (
+				            SELECTEDMEASURE (),
+				            'Time Intelligence'[Time Calculation] = "PY"
+				        ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem YOY% =
+					formatStringDefinition = "#,##0.00%"
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    DIVIDE (
+				        CALCULATE (
+				            SELECTEDMEASURE (),
+				            'Time Intelligence'[Time Calculation] = "YOY"
+				        ),
+				        CALCULATE (
+				            SELECTEDMEASURE (),
+				            'Time Intelligence'[Time Calculation] = "PY"
+				        )
+				    ),
+				    SELECTEDMEASURE ()
+				)
+
+			calculationItem FYTD =
+				IF (
+				    ISNUMERIC ( SELECTEDMEASURE () ),
+				    TOTALYTD ( SELECTEDMEASURE (), DimDate[Date], "09/30" ),
+				    SELECTEDMEASURE ()
+				)
+
+		column 'Time Calculation'
+			dataType: string
+			summarizeBy: none
+			sourceColumn: Name
+			sortByColumn: Ordinal
+
+		column Ordinal
+			dataType: int64
+			isHidden
+			formatString: 0
+			summarizeBy: none
+			sourceColumn: Ordinal

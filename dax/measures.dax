@@ -1,0 +1,114 @@
+// Northwind DW — explicit measures (DataFabric Academy DAX curriculum)
+// Best practice: fully qualify columns; never qualify measure references.
+// Prefer SUM of materialized columns; use SUMX only when teaching iterators.
+
+// ===== Sales =====
+Sales Amount = SUM ( FactSales[SalesAmount] )
+
+Sales Quantity = SUM ( FactSales[Quantity] )
+
+Discount Amount = SUM ( FactSales[DiscountAmount] )
+
+Line Cost = SUM ( FactSales[LineCost] )
+
+Profit = SUM ( FactSales[Profit] )
+
+Profit Margin = DIVIDE ( [Profit], [Sales Amount] )
+
+Average Rating = AVERAGE ( FactSales[Rating] )
+
+// ===== Volume =====
+Order Lines = COUNTROWS ( FactSales )
+
+Orders = DISTINCTCOUNT ( FactSales[OrderID] )
+
+Customers = DISTINCTCOUNT ( FactSales[CustomerKey] )
+
+#Customer = COUNTROWS ( DimCustomer )
+
+#Product = COUNTROWS ( DimProduct )
+
+#Country = DISTINCTCOUNTNOBLANK ( DimCustomer[Country] )
+
+// ===== Teaching: iterators (compare to materialized SUM) =====
+Sales Amount (SUMX) =
+SUMX (
+    FactSales,
+    FactSales[UnitPrice] * FactSales[Quantity] * ( 1 - FactSales[Discount] )
+)
+
+Line Cost (from StandardCost) =
+SUMX (
+    FactSales,
+    RELATED ( DimProduct[StandardCost] ) * FactSales[Quantity]
+)
+
+Avg Active List Price =
+AVERAGEX (
+    FILTER ( DimProduct, DimProduct[Status] = "Active" ),
+    DimProduct[ListPrice]
+)
+
+Max Active List Price =
+MAXX (
+    FILTER ( DimProduct, DimProduct[Status] = "Active" ),
+    DimProduct[ListPrice]
+)
+
+// ===== CALCULATE =====
+Sales Amount EU =
+CALCULATE (
+    [Sales Amount],
+    KEEPFILTERS ( DimCustomer[Country] IN { "Germany", "Italy", "France" } )
+)
+
+// ===== Role-playing dates =====
+Sales Amount (Required Date) =
+CALCULATE (
+    [Sales Amount],
+    USERELATIONSHIP ( FactSales[RequiredDateKey], DimDate[DateKey] )
+)
+
+Sales Amount (Shipped Date) =
+CALCULATE (
+    [Sales Amount],
+    USERELATIONSHIP ( FactSales[ShippedDateKey], DimDate[DateKey] )
+)
+
+Profit (Shipped Date) =
+CALCULATE (
+    [Profit],
+    USERELATIONSHIP ( FactSales[ShippedDateKey], DimDate[DateKey] )
+)
+
+Sales Quantity (Required Date) =
+CALCULATE (
+    [Sales Quantity],
+    USERELATIONSHIP ( FactSales[RequiredDateKey], DimDate[DateKey] )
+)
+
+// ===== Classic time intelligence (expect measure explosion → Lesson 11) =====
+Sales Amount YTD = TOTALYTD ( [Sales Amount], DimDate[Date] )
+
+Sales Amount PY =
+CALCULATE ( [Sales Amount], SAMEPERIODLASTYEAR ( DimDate[Date] ) )
+
+Sales Amount YoY % =
+DIVIDE ( [Sales Amount] - [Sales Amount PY], [Sales Amount PY] )
+
+Sales Amount FYTD =
+TOTALYTD ( [Sales Amount], DimDate[Date], "09/30" )
+
+Sales Quantity YTD = TOTALYTD ( [Sales Quantity], DimDate[Date] )
+
+Sales Quantity PY =
+CALCULATE ( [Sales Quantity], SAMEPERIODLASTYEAR ( DimDate[Date] ) )
+
+Sales Quantity YoY % =
+DIVIDE ( [Sales Quantity] - [Sales Quantity PY], [Sales Quantity PY] )
+
+Sales Amount Rolling 60d =
+CALCULATE (
+    [Sales Amount],
+    DATESINPERIOD ( DimDate[Date], MAX ( DimDate[Date] ), -60, DAY )
+)
