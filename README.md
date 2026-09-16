@@ -23,6 +23,17 @@
 
 รายละเอียด: [docs/lessons/01-star-schema-and-get-data.md](docs/lessons/01-star-schema-and-get-data.md)
 
+### Cursor + Power BI Modeling MCP (ผู้สอน / ผู้พัฒนาโมเดล)
+
+โปรเจกต์นี้ลงทะเบียน MCP ระดับ workspace ที่ [`.cursor/mcp.json`](.cursor/mcp.json) ตาม [microsoft/powerbi-modeling-mcp](https://github.com/microsoft/powerbi-modeling-mcp)  
+Rule: [`.cursor/rules/powerbi-modeling-mcp.mdc`](.cursor/rules/powerbi-modeling-mcp.mdc)
+
+1. เปิดโฟลเดอร์นี้ใน Cursor → **Settings → MCP** ตรวจว่า `powerbi-modeling-mcp` เปิดอยู่ (ต้องมี Node.js / `npx`)
+2. เชื่อมโมเดลก่อนใช้เครื่องมือ (Desktop / Fabric / PBIP)
+3. สำรอง `.pbix` ก่อนให้ agent แก้โมเดล
+
+นักเรียนเรียนจาก Markdown + Excel — **ไม่บังคับ** ติดตั้ง MCP
+
 ## ลำดับบทเรียน
 
 1. [Star schema และ Get Data](docs/lessons/01-star-schema-and-get-data.md)

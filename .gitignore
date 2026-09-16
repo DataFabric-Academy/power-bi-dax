@@ -26,5 +26,8 @@ venv/
 # Optional pristine backup (local only)
 data/_pristine_*.xlsx
 
-# Agent / Cursor local
-.cursor/
+# Cursor — keep project MCP + rules in git; ignore other local Cursor state
+.cursor/*
+!.cursor/mcp.json
+!.cursor/rules/
+!.cursor/rules/**

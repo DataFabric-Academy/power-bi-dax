@@ -1,0 +1,45 @@
+---
+description: Use Power BI Modeling MCP for semantic model / DAX work in this curriculum repo
+alwaysApply: true
+---
+
+# Power BI Modeling MCP
+
+Project MCP: `.cursor/mcp.json` → `powerbi-modeling-mcp`  
+Upstream: [microsoft/powerbi-modeling-mcp](https://github.com/microsoft/powerbi-modeling-mcp) (Public Preview)
+
+## When to use the MCP
+
+Prefer MCP tools over guessing model state when the task needs a **live or PBIP semantic model**:
+
+- connect / inspect tables, columns, measures, relationships
+- create or update measures, calc groups, hierarchies
+- validate or run DAX queries
+- bulk rename / apply modeling best practices
+
+Formula **catalog** in git stays in `dax/measures.dax` and `dax/calculation-groups.tmdl`. Sync those files when MCP changes the model (or vice versa) so Markdown lessons stay the source of truth for students.
+
+## Connect first
+
+Ask the user which target, then connect:
+
+1. **Desktop:** Connect to `'[File Name]'` in Power BI Desktop
+2. **Fabric:** Connect to semantic model `'[Name]'` in workspace `'[Workspace]'`
+3. **PBIP:** Open semantic model from the TMDL / `definition` folder path
+
+Do not invent connection success — use MCP connection tools and report errors.
+
+## Safety
+
+- Backup `.pbix` / PBIP before write operations
+- Do **not** pass `--skipconfirmation` in project MCP config
+- This MCP cannot edit report pages / visuals — only semantic model modeling ops
+- Never commit secrets; Fabric auth uses the user's interactive login / env vars locally
+
+## Curriculum conventions (Northwind DW)
+
+- Star schema; integer `*Key`; hide FKs; Mark `DimDate[Date]` as Date Table
+- Explicit measures only; Discourage implicit measures before calc groups
+- Qualify columns `Table[Column]`; never qualify measures `[Measure]`
+- Prefer `DIVIDE`, Boolean `CALCULATE` filters, `KEEPFILTERS` when needed
+- Time intelligence patterns → calculation groups with `SELECTEDMEASURE()`, not measure explosion
