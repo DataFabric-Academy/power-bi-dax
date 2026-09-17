@@ -1,11 +1,24 @@
 # Power BI DAX — Northwind DW Curriculum (DataFabric Academy)
 
-หลักสูตร DAX ที่สอนตามโครงเรื่อง 9EXPERT Version 22 แต่สร้าง **นิสัย semantic model ที่ถูกตั้งแต่ต้น** ด้วย Northwind star schema
+หลักสูตร DAX ที่สอนตามโครงเรื่อง 9EXPERT Version 22 แต่สร้าง **นิสัย semantic model ที่ถูกตั้งแต่ต้น** ด้วย Northwind star schema พร้อมคำอธิบายแบบ **Mental Model (ภาพจำในใจ)** ที่ช่วยให้ผู้เรียนทุกระดับ (เทียบเท่ามัธยมปลายเข้าใจได้ทันที) โดยยังคงรักษามาตรฐานทางเทคนิคระดับมืออาชีพสำหรับ Data Analyst, Business Analyst และ BI Developer ไว้อย่างครบถ้วน
+
+> 💡 **แผนผังภาพจำในใจ (Mental Model Cheatsheet):**  
+> - **Star Schema:** ดวงอาทิตย์ (Fact บันทึกธุรกรรมซ้ำๆ) ล้อมรอบด้วยดาวเคราะห์บริวาร (Dimension สมุดทะเบียนอ้างอิง)  
+> - **Grain:** ระดับความละเอียดของกล้องจุลทรรศน์ (1 แถวใน Fact คือ 1 รายการสินค้าในบิล ไม่ใช่ทั้งบิล)  
+> - **Filter Context:** แว่นตากรองแสงสี (ผู้ใช้จิ้มเลือกปี/ประเทศ ข้อมูลถูกร่อนเหลือเฉพาะส่วนนั้นก่อนคำนวณ)  
+> - **Row Context:** นิ้วชี้ที่ไล่ตรวจทีละบรรทัดในสมุดบัญชี (เกิดขึ้นใน Calculated Column และ Iterators เช่น SUMX)  
+> - **CALCULATE:** รีโมทคอนโทรลสั่งเปลี่ยนแว่นกรองสีก่อนคิดเลข (สามารถสั่งเพิ่ม ถอด หรือสลับแว่นได้)  
+> - **Calculation Groups:** แผ่นฟิลเตอร์สวมทับหน้าเลนส์กล้อง (สร้างสูตรเวลา เช่น YTD แผ่นเดียว สวมได้กับทุก Measure)  
+> - **VertiPaq Engine:** ตู้เก็บเอกสารแยกตามคอลัมน์และบีบอัดรหัสย่อ (ทำให้อ่านข้อมูลเร็วขึ้นหลายสิบเท่า)
 
 | แหล่ง | บทบาท |
 | --- | --- |
 | [`data/Northwind_DW_DimFact.xlsx`](data/Northwind_DW_DimFact.xlsx) | ไฟล์เดียวที่ Get Data เข้าโมเดล |
 | [`docs/lessons/`](docs/lessons/) | **แหล่งความจริง** — ทฤษฎี + ขั้นตอน + สูตร + Lab (โจทย์รวมเฉลย) |
+| [`docs/CURRICULUM.md`](docs/CURRICULUM.md) | เป้าหมายการเรียนรู้ · map Microsoft Learn · ลำดับชั่วโมง |
+| [`docs/instructor/README.md`](docs/instructor/README.md) | คู่มือผู้สอน |
+| [`docs/semantic-model/README.md`](docs/semantic-model/README.md) | Semantic model · MCP · DAX query view |
+| [`docs/reference/dax-function-index.md`](docs/reference/dax-function-index.md) | ดัชนีฟังก์ชันตามบท |
 | [`docs/best-practices/`](docs/best-practices/) | ดัชนี BP (แทรกทุกบท) |
 | [`dax/measures.dax`](dax/measures.dax) | แคตตาล็อก measure |
 | [`dax/calculation-groups.tmdl`](dax/calculation-groups.tmdl) | Time Intelligence calc group |
@@ -28,6 +41,16 @@
 โปรเจกต์นี้ลงทะเบียน MCP ระดับ workspace ที่ [`.cursor/mcp.json`](.cursor/mcp.json) ตาม [microsoft/powerbi-modeling-mcp](https://github.com/microsoft/powerbi-modeling-mcp)  
 Rule: [`.cursor/rules/powerbi-modeling-mcp.mdc`](.cursor/rules/powerbi-modeling-mcp.mdc)
 
+Project skills จาก [microsoft/skills-for-fabric `powerbi-authoring`](https://github.com/microsoft/skills-for-fabric/tree/main/plugins/powerbi-authoring) อยู่ที่ [`.cursor/skills/`](.cursor/skills/) (เวอร์ชัน 0.3.16 — ดู [SOURCE.md](.cursor/skills/SOURCE.md))
+
+| Skill | ใช้เมื่อ |
+| --- | --- |
+| `semantic-model-authoring` | แก้ semantic model / DAX / relationships |
+| `powerbi-report-planning` | เก็บ requirement ก่อนลงมือทำรายงาน |
+| `powerbi-report-design` | ออกแบบ visual / layout / theme |
+| `powerbi-report-authoring` | แก้ไฟล์รายงาน PBIR/PBIP |
+| `powerbi-report-management` | publish / download รายงานบน Fabric |
+
 1. เปิดโฟลเดอร์นี้ใน Cursor → **Settings → MCP** ตรวจว่า `powerbi-modeling-mcp` เปิดอยู่ (ต้องมี Node.js / `npx`)
 2. เชื่อมโมเดลก่อนใช้เครื่องมือ (Desktop / Fabric / PBIP)
 3. สำรอง `.pbix` ก่อนให้ agent แก้โมเดล
@@ -45,12 +68,13 @@ Rule: [`.cursor/rules/powerbi-modeling-mcp.mdc`](.cursor/rules/powerbi-modeling-
 7. [RELATED และ Relationships](docs/lessons/07-related-and-relationships.md)
 8. [Date Table](docs/lessons/08-date-table.md)
 9. [CALCULATE](docs/lessons/09-calculate.md)
-10. [Time Intelligence (classic)](docs/lessons/10-time-intelligence.md)
-11. [Calculation Groups](docs/lessons/11-calculation-groups.md) ← แทน Dynamic Measure แบบ SWITCH
-12. [Field Parameters](docs/lessons/12-field-parameters.md)
-13. [What-if](docs/lessons/13-what-if.md)
-14. [Visual Calculations](docs/lessons/14-visual-calculations.md) (ภาคผนวก)
-15. [VertiPaq checklist](docs/lessons/15-vertipaq-and-performance.md)
+10. [Filter modifiers & Context transition](docs/lessons/16-filter-modifiers-and-context-transition.md) ← แนะนำหลัง 09
+11. [Time Intelligence (classic)](docs/lessons/10-time-intelligence.md)
+12. [Calculation Groups](docs/lessons/11-calculation-groups.md) ← แทน Dynamic Measure แบบ SWITCH
+13. [Field Parameters](docs/lessons/12-field-parameters.md)
+14. [What-if](docs/lessons/13-what-if.md)
+15. [Visual Calculations](docs/lessons/14-visual-calculations.md) (ภาคผนวก)
+16. [VertiPaq checklist](docs/lessons/15-vertipaq-and-performance.md)
 
 ## ตรวจคุณภาพข้อมูล
 

@@ -1,142 +1,108 @@
 # 03 — Calculated Column
 
-**เป้าหมาย:** สร้างคอลัมน์สำหรับ Slicer / จัดกลุ่ม / Sort by Column เท่านั้น — ไม่ใช้แทน measure  
-**ข้อกำหนด:** มี `DimEmployee[BirthDate]`, `BirthYear`, `DimProduct[ListPrice]`
+**เป้าหมาย:** เข้าใจกระบวนการทำงานของ Calculated Column ภายใต้ Row Context, รู้จักผลกระทบต่อหน่วยความจำ (RAM Footprint) ในเอนจิน VertiPaq, และรู้วิธีตั้งค่า Sort by Column อย่างถูกต้อง  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 02 เรียบร้อยแล้ว
 
 ---
 
-## Column vs Measure — เลือกผิดเสียทั้งโมเดล
+## Calculated Column ทำงานอย่างไร?
 
-| ใช้ Calculated Column | ใช้ Measure |
-| --- | --- |
-| Generation, AgeGroup, PriceRange | ยอดขาย, % Margin, YTD |
-| ต้องการ Sort by Column / Slicer / Legend | Ratio ที่เปลี่ยนตาม filter |
-| ค่าคงที่ต่อแถวหลัง refresh | ค่าที่ต้องตอบ filter context |
+Calculated Column คือคอลัมน์ที่ถูกสร้างขึ้นใหม่ในตารางข้อมูล โดยใช้สูตร DAX คำนวณหาผลลัพธ์ทีละแถว
 
-Calculated column **ถูก materialize** เข้า VertiPaq → เพิ่ม RAM  
-Measure คำนวณตอน query → ยืดหยุ่นกับ filter
-
-> **Best practice:** Prefer สร้างคอลัมน์ใน Power Query/ETL เมื่อไม่ต้องอิง measure  
-> อ้าง: [Calculation options](https://learn.microsoft.com/power-bi/transform-model/desktop-calculations-options) · [Preference for custom columns](https://learn.microsoft.com/power-bi/guidance/import-modeling-data-reduction#preference-for-custom-columns)
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การเขียนหมึกถาวรลงในสมุดบัญชี**  
+> การสร้าง Calculated Column เปรียบเสมือนการ **"หยิบปากกาหมึกซึมมาตีเส้นเพิ่มช่องคอลัมน์ใหม่ลงในสมุดบัญชี แล้วนั่งคำนวณทีละบรรทัดจนครบทุกหน้า"**  
+> - การคำนวณนี้จะเกิดขึ้น **ครั้งเดียวตอนที่เรากด Refresh ข้อมูล** (หรือตอนพิมพ์สูตรเสร็จ)  
+> - ผลลัพธ์ตัวเลขหรือข้อความจะถูกบันทึกลงในหน่วยความจำ RAM ของคอมพิวเตอร์อย่างถาวร (เรียกว่าการ **Materialize**)  
+> - เมื่อมีคนเปิดดูรายงาน ค่าเหล่านี้มีอยู่แล้วในตาราง จึงไม่ต้องเสียเวลาคำนวณใหม่อีก
 
 ---
 
-## Generation บน DimEmployee
+## เมื่อไหร่ควรใช้ และเมื่อไหร่ที่ "ห้ามใช้"?
 
-ใช้ `BirthYear` ที่ ETL เตรียมไว้ (ไม่ต้อง parse วันที่เอง):
+นี่คือข้อแตกต่างสำคัญระหว่างผู้ใช้ทั่วไป กับ Data Analyst / BI Developer มืออาชีพ:
 
-```dax
-Generation =
-VAR y = DimEmployee[BirthYear]
-RETURN
-    SWITCH (
-        TRUE (),
-        y <= 1964, "Baby Boom Generation",
-        y <= 1980, "Generation X",
-        y <= 1996, "Generation Y",
-        y <= 2010, "Generation Z",
-        "Generation Alpha"
-    )
-```
+| สถานการณ์ที่ **ควรใช้** Calculated Column | สถานการณ์ที่ **ห้ามใช้** (ให้ใช้ Measure แทน) |
+| :--- | :--- |
+| 1. ต้องการนำผลลัพธ์ไปใส่เป็น **แกนกราฟ (Axis)** เช่น ช่วงอายุ, กลุ่มราคา | 1. ต้องการหา **ผลรวม ยอดเงิน หรือค่าเฉลี่ย** เพื่อเอาไปโชว์บนการ์ดสรุปหรือในตาราง |
+| 2. ต้องการนำผลลัพธ์ไปเป็น **ตัวกรอง (Slicer)** เช่น สถานะสินค้า (Active/Discontinued) | 2. สูตรนั้นต้องเปลี่ยนค่าไปตามการคลิกเลือก Slicer ของผู้ใช้รายงาน |
+| 3. ต้องการใช้คอลัมน์นี้เป็น **คีย์ในการเชื่อมความสัมพันธ์ (Relationship Key)** | 3. ตารางมีข้อมูลนับสิบล้านแถว และการคำนวณกินเนื้อที่แรมโดยไม่จำเป็น |
 
-```dax
-Generation Sort =
-VAR y = DimEmployee[BirthYear]
-RETURN
-    SWITCH (
-        TRUE (),
-        y <= 1964, 1,
-        y <= 1980, 2,
-        y <= 1996, 3,
-        y <= 2010, 4,
-        5
-    )
-```
-
-คลิกคอลัมน์ `Generation` → **Sort by column** → `Generation Sort`
+> ⚠️ **คำเตือนระดับองค์กร (Best Practice):**  
+> อย่าสร้าง Calculated Column เพื่อหายอดเงินรวม เช่น สร้างคอลัมน์กำไรแล้วลากไป SUM บนกราฟ เพราะจะเปลืองเนื้อที่ RAM มหาศาล ให้สร้างเป็น **Explicit Measure** แทนเสมอ!
 
 ---
 
-## AgeGroup (lab — ระวัง TODAY)
+## ตัวอย่างการใช้งานจริงใน Northwind DW
 
+### ตัวอย่างที่ 1: การรวมข้อความบนตาราง Dimension (Row Context)
+การนำชื่อและนามสกุลของพนักงานมารวมกันบนตาราง `DimEmployee`:
 ```dax
-AgeGroup =
-VAR Age = DATEDIFF ( DimEmployee[BirthDate], TODAY (), YEAR )
-RETURN
-    SWITCH (
-        TRUE (),
-        Age < 25, "Under 25",
-        Age < 40, "25-40",
-        Age < 50, "41-50",
-        "Over 50"
-    )
+FullName = DimEmployee[FirstName] & " " & DimEmployee[LastName]
 ```
+*(ระบบใช้นิ้วชี้ทีละแถวใน `DimEmployee` หยิบชื่อและนามสกุลมาต่อกัน ได้คอลัมน์ใหม่เอาไปใช้ใส่ใน Slicer หรือแกนกราฟได้อย่างสวยงาม)*
 
+### ตัวอย่างที่ 2: การแปลงรหัสตัวเลขเป็นข้อความที่มนุษย์เข้าใจง่าย
+ในตาราง `DimProduct` คอลัมน์ `Discontinued` เก็บค่าเป็นเลข 1 (เลิกผลิต) หรือ 0 (ยังผลิตอยู่) เราสามารถสร้างคอลัมน์คำอธิบายได้ดังนี้:
 ```dax
-AgeGroupSort =
-VAR Age = DATEDIFF ( DimEmployee[BirthDate], TODAY (), YEAR )
-RETURN
-    SWITCH (
-        TRUE (),
-        Age < 25, 1,
-        Age < 40, 2,
-        Age < 50, 3,
-        4
-    )
-```
-
-> **Best practice:** `TODAY()` ใน calculated column ติดค่าตอน **refresh** ไม่ใช่ตอนเปิดรายงานทุกวัน — lab ใช้ได้ แต่ production คำนวณ Age ที่ ETL หรือใช้ measure  
-> อ้าง: ลิงก์ Calculation options ด้านบน
-
----
-
-## PriceRange บน DimProduct
-
-```dax
-PriceRange =
-SWITCH (
-    TRUE (),
-    DimProduct[ListPrice] <= 20, "Under 20",
-    DimProduct[ListPrice] <= 40, "21-40",
-    DimProduct[ListPrice] <= 60, "41-60",
-    "Over 60"
+IsDiscontinuedText = 
+IF ( 
+    DimProduct[Discontinued] = 1, 
+    "Discontinued", 
+    "Active" 
 )
 ```
 
+### ตัวอย่างที่ 3: การคำนวณส่วนต่างในระดับแถวของตาราง Fact
+ในตาราง `FactSales` เราต้องการหา Margin (กำไรส่วนเพิ่มต่อชิ้นงาน) ในระดับแต่ละแถว:
 ```dax
-PriceRangeSort =
-SWITCH (
-    TRUE (),
-    DimProduct[ListPrice] <= 20, 1,
-    DimProduct[ListPrice] <= 40, 2,
-    DimProduct[ListPrice] <= 60, 3,
-    4
-)
+Margin = FactSales[SalesAmount] - FactSales[LineCost]
+```
+และคำนวณสัดส่วน Margin Rate:
+```dax
+MarginRate = DIVIDE ( FactSales[Margin], FactSales[SalesAmount] )
+```
+*(ข้อสังเกต: ในระบบงานจริงขนาดใหญ่ หากคอลัมน์ตัวเลขเหล่านี้สามารถคำนวณและเตรียมไว้ได้ตั้งแต่ในฐานข้อมูล SQL หรือขั้นตอน Data Pipeline (ELT) จะช่วยประหยัดทรัพยากรของ Power BI ได้ดียิ่งขึ้น)*
+
+---
+
+## เทคนิคสำคัญ: Sort by Column (การแก้ปัญหาเรียงลำดับผิดธรรมชาติ)
+
+ลองนึกภาพว่าคุณนำชื่อเดือน (เช่น "มกราคม", "กุมภาพันธ์", "มีนาคม" หรือ "January", "February") ไปวางบนแกนกราฟ  
+คอมพิวเตอร์เป็นระบบที่อ่านตัวอักษร มันจะไม่รู้ว่าเดือนไหนมาก่อนมาหลังตามธรรมชาติ แต่มันจะเรียงตาม **ตัวอักษร ก-ฮ หรือ A-Z** (เช่น "April" จะขึ้นมาก่อน "January" หรือ "กุมภาพันธ์" จะขึ้นก่อน "มกราคม")
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การติดป้ายหมายเลขคิว**  
+> เพื่อให้คอมพิวเตอร์เรียงลำดับได้ถูกต้อง เราต้องบอกมันว่า **"เวลาเรียงชื่อเดือนนี้ ให้แอบดูหมายเลขคิวในอีกคอลัมน์หนึ่งนะ"**
+
+### วิธีตั้งค่า Sort by Column:
+1. ไปที่มุมมอง **Data view** หรือ **Model view**
+2. คลิกเลือกคอลัมน์ชื่อเดือน เช่น `DimDate[MonthName]`
+3. ที่แถบเครื่องมือด้านบน เลือกเมนู **Column tools → Sort by column**
+4. เลือกคอลัมน์ที่เป็นตัวเลขลำดับ เช่น `DimDate[MonthKey]` หรือ `DimDate[MonthNumberOfYear]`
+5. ผลลัพธ์: กราฟและตารางจะเรียงลำดับเดือน มกราคม → กุมภาพันธ์ → มีนาคม อย่างถูกต้องสมบูรณ์ทันที
+
+---
+
+## Lab 03 — สร้าง Calculated Column และจัดลำดับ (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. ในตาราง `DimProduct` สร้าง Calculated Column ชื่อ `IsDiscontinuedText` โดยถ้า `Discontinued = 1` ให้แสดงคำว่า `"Discontinued"` ถ้าไม่ใช่ให้แสดงคำว่า `"Active"`
+2. ในตาราง `DimEmployee` สร้าง Calculated Column ชื่อ `FullName` โดยนำ `FirstName` เว้นวรรค แล้วตามด้วย `LastName`
+3. ในตาราง `DimDate` ตรวจสอบคอลัมน์ `MonthName` และตั้งค่า **Sort by column** ให้เรียงตาม `MonthKey`
+4. สร้างกราฟคอลัมน์ แสดงยอดขายตาม `MonthName` เพื่อตรวจดูว่าเดือนเรียงลำดับตามปฏิทินถูกต้องหรือไม่
+
+### เฉลยสูตร
+```dax
+// 1. ตาราง DimProduct
+IsDiscontinuedText = IF ( DimProduct[Discontinued] = 1, "Discontinued", "Active" )
+
+// 2. ตาราง DimEmployee
+FullName = DimEmployee[FirstName] & " " & DimEmployee[LastName]
 ```
 
-Sort by column เช่นเดียวกับ Generation
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- คอลัมน์ `FullName` แสดงชื่อและนามสกุลมีเว้นวรรคถูกต้องทุกแถว
+- เมื่อนำ `MonthName` ไปใส่ในแกนกราฟ แสดงลำดับเรียงจากเดือนมกราคมไปจนถึงธันวาคม ไม่ได้เรียงตามตัวอักษร A-Z
 
 ---
 
-## Lab 03 — Calculated Columns (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. สร้าง `Generation` + `Generation Sort` แล้ว Sort by Column
-2. สร้าง `AgeGroup` + `AgeGroupSort`
-3. สร้าง `PriceRange` + `PriceRangeSort`
-4. Matrix: แถว = Generation, ค่า = `[Sales Amount]`
-
-### เฉลย
-
-ใช้สูตรในบทนี้ทั้งหมด แล้วตั้ง Sort by Column ให้ครบสามชุด  
-ถ้า Generation เรียงตามตัวอักษร (Baby มาก่อน Generation X ผิดยุค) = ยังไม่ได้ Sort by Column
-
-### เกณฑ์ผ่าน
-
-- Generation เรียงตามยุค (Baby Boom → … → Alpha) ไม่ใช่ A–Z
-- Matrix แสดงยอดขายตาม Generation ได้
-
----
-
-**ถัดไป:** [04 — Measures](04-measures.md)
+**บทเรียนถัดไป:** [04 — Measures](04-measures.md)

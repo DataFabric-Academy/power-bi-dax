@@ -62,6 +62,20 @@ CALCULATE (
     KEEPFILTERS ( DimCustomer[Country] IN { "Germany", "Italy", "France" } )
 )
 
+Sales Amount EU Share =
+VAR EuSales = [Sales Amount EU]
+VAR AllSales =
+    CALCULATE ( [Sales Amount], REMOVEFILTERS ( DimCustomer[Country] ) )
+RETURN
+    DIVIDE ( EuSales, AllSales )
+
+Sales Amount % of Visual =
+VAR Numerator = [Sales Amount]
+VAR Denominator =
+    CALCULATE ( [Sales Amount], ALLSELECTED ( DimProduct[Category] ) )
+RETURN
+    DIVIDE ( Numerator, Denominator )
+
 // ===== Role-playing dates =====
 Sales Amount (Required Date) =
 CALCULATE (

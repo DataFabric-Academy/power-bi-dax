@@ -1,61 +1,63 @@
 # 14 — Visual Calculations (ภาคผนวก)
 
-**เป้าหมาย:** รู้ว่า visual calculation อยู่ชั้นรายงาน ไม่ใช่ semantic model — ใช้เมื่อต้องการ running sum ฯลฯ เฉพาะ visual  
-**สถานะ:** Optional — ไม่บังคับสำหรับเกณฑ์จบคอร์สหลัก
-
-อ้างอิง: [Using visual calculations](https://learn.microsoft.com/power-bi/transform-model/desktop-visual-calculations-introduction)
+**เป้าหมาย:** ทำความเข้าใจนวัตกรรมใหม่ของ Power BI: **Visual Calculations**, รู้วิธีคำนวณหายอดสะสมหรือผลต่างแถวต่อแถวบนตารางโดยตรงด้วย `RUNNINGSUM`, และรู้ข้อจำกัดในการเลือกใช้งานเมื่อเทียบกับโมเดล DAX ปกติ  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 13 เรียบร้อยแล้ว
 
 ---
 
-## อยู่คนละชั้นกับ Measure / Calc group
+## Visual Calculations คืออะไร?
 
-| ชั้น | เก็บสูตรที่ | ใช้ซ้ำข้ามหน้า |
-| --- | --- | --- |
-| Measure / Calc group | Semantic model | ได้ |
-| Visual calculation | Visual นั้นเท่านั้น | ไม่ได้ (ต้องสร้างใหม่ต่อ visual) |
+ตลอดทั้งหลักสูตรนี้ เราเรียนรู้การเขียน DAX บน Semantic Model (Calculated Column, Measure, Calculation Groups) ซึ่งเป็นการคำนวณที่อิงกับฐานข้อมูลส่วนกลาง  
+แต่นวัตกรรมล่าสุดของ Power BI ได้เพิ่มความสามารถที่เรียกว่า **Visual Calculations (การคำนวณระดับภาพ)** เข้ามา
 
-ฟังก์ชันตัวอย่างบน visual: `RUNNINGSUM`, `MOVINGAVERAGE`, `PREVIOUS`, `COLLAPSE` ฯลฯ
-
----
-
-## ขั้นตอนสั้น ๆ
-
-1. สร้าง Matrix: แถว = `DimDate[MonthName]`, ค่า = `[Sales Amount]`
-2. เลือก visual → **New calculation**
-3. เลือกเทมเพลต Running sum (หรือพิมพ์สูตร)
-4. ผลอยู่คอลัมน์ใหม่บน visual — **ไม่โผล่ใน Model view**
-
-เปรียบกับ `[Sales Amount YTD]` หรือ calc item YTD ในโมเดล:
-
-- YTD ในโมเดลตอบ filter/slicer ทั้งรายงานและใช้ซ้ำได้
-- Running sum บน visual ผูกกับแกนของ visual นั้น
-
-> **Best practice:** สิ่งที่ใช้ซ้ำและเป็นนิยามธุรกิจ → ใส่โมเดล; สิ่งเฉพาะ ad-hoc บน visual เดียว → visual calculation ได้  
-> อ้าง: ลิงก์ Learn ด้านบน
-
-### ภาคผนวกสั้น — DAX UDFs
-
-User-defined functions ใน DAX (GA ตาม roadmap Learn ~กลางปี 2026) ช่วย reuse logic เช่น format string — ยังไม่ใช่แกนคอร์สนี้; รู้ว่ามีเพื่อไม่สับสนกับ visual calc
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การทดเลขบนกระดานไวท์บอร์ด**  
+> - **DAX ปกติ (Model Level):** เหมือนการเดินเข้าไปค้นข้อมูลในคลังเอกสารใหญ่หลังบ้าน แล้วนั่งกดเครื่องคิดเลขคำนวณออกมาใหม่ทั้งหมด  
+> - **Visual Calculations:** เหมือนการ **"หยิบปากกาไวท์บอร์ดมาทดเลขบวก-ลบต่อยอดจากตัวเลขที่โชว์อยู่บนกระดานตรงหน้าทันที"**  
+> เช่น ตาราง Matrix มีตัวเลขยอดขายของ 12 เดือนโชว์อยู่แล้ว เราแค่อยากหายอดรวมสะสมไล่ลงมาทีละเดือน การคำนวณบนตัวเลขที่เห็นอยู่ตรงหน้าเลยจะทำได้ง่ายและรวดเร็วมาก โดยไม่ต้องเขียนสูตร DAX โมเดลที่ซับซ้อน
 
 ---
 
-## Lab 14 — Visual Calculations (โจทย์ + เฉลย) — optional
+## ตัวอย่างไวยากรณ์ Visual Calculations
 
-### โจทย์
+Visual Calculations จะทำงานกับแกนพิกัดของตารางโดยตรง โดยมีฟังก์ชันเฉพาะทาง เช่น:
 
-1. Matrix Month × Sales Amount
-2. เพิ่ม visual calculation Running sum บนแกนแถว
-3. เปรียบกับ measure/calc item YTD — ระบุว่าคนละชั้น
+```dax
+// หายอดรวมสะสมตามแถวที่ปรากฏในตาราง
+Running Total = RUNNINGSUM ( [Sales Amount] )
 
-### เฉลย
+// เลื่อนขยับไปดูค่าของแถวก่อนหน้า (คล้าย LAG ใน SQL)
+Previous Month Sales = PREVIOUS ( [Sales Amount] )
 
-New calculation → Running sum บน visual  
-คำตอบ: สูตรนี้อยู่ที่ visual ไม่ได้อยู่ใน Model view / ไม่แทนที่ calc group
-
-### เกณฑ์ผ่าน
-
-- ระบุได้ว่าสูตรอยู่ชั้นรายงาน
+// คำนวณผลต่างเทียบกับแถวก่อนหน้า
+MoM Change = [Sales Amount] - PREVIOUS ( [Sales Amount] )
+```
 
 ---
 
-**ถัดไป:** [15 — VertiPaq checklist](15-vertipaq-and-performance.md)
+## ข้อดีและข้อจำกัดที่ BI Developer ต้องระวัง
+
+| ข้อดีของ Visual Calculations | ข้อจำกัดสำคัญ |
+| :--- | :--- |
+| 1. เขียนง่าย ไม่ต้องปวดหัวเรื่อง Filter Context ที่ซับซ้อน | 1. **ไม่สามารถนำไปใช้ซ้ำใน Visual อื่นได้** (สูตรติดอยู่เฉพาะในตารางนั้น) |
+| 2. ประมวลผลได้เร็วมาก เพราะคิดบนข้อมูลที่ถูกสรุปมาแล้ว | 2. ไม่สามารถนำไปใส่ใน Slicer หรือส่งออกไปเป็น Semantic Model กลางได้ |
+| 3. เหมาะมากสำหรับโจทย์ Running Total, Moving Average, หรือ % of Parent | 3. ไม่เหมาะกับตรรกะธุรกิจหลักที่ต้องใช้อ้างอิงร่วมกันทั่วทั้งองค์กร |
+
+---
+
+## Lab 14 — ทดลองสร้าง Visual Calculation (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. สร้างตาราง Matrix: นำ `DimDate[Year]` และ `DimDate[MonthName]` มาวางที่ Rows และนำ `[Sales Amount]` ไปวางที่ Values
+2. คลิกที่ตาราง Matrix นั้น → บนแถบเครื่องมือด้านบน เลือก **New visual calculation**
+3. พิมพ์สูตร:
+```dax
+Sales Running Total = RUNNINGSUM ( [Sales Amount] )
+```
+4. สังเกตคอลัมน์ใหม่ที่ปรากฏใน Matrix
+
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- คอลัมน์ `Sales Running Total` แสดงตัวเลขยอดขายสะสมทบยอดเพิ่มขึ้นเรื่อยๆ ทีละเดือนได้อย่างถูกต้อง
+
+---
+
+**บทเรียนถัดไป:** [15 — VertiPaq checklist](15-vertipaq-and-performance.md)

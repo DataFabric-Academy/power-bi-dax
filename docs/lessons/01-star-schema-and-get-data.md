@@ -1,136 +1,144 @@
 # 01 — Star schema และ Get Data
 
-**เป้าหมาย:** สร้าง semantic model ตั้งต้นที่ถูก — star schema, integer keys, Date table, explicit measure  
+**เป้าหมาย:** สร้าง Semantic Model ตั้งต้นที่ได้มาตรฐานระดับองค์กร — ทำความเข้าใจโครงสร้างแบบ Star Schema, คีย์ตัวเลข (Integer Surrogate Keys), ตารางปฏิทินวันที่ (Date Table), และการสร้าง Explicit Measure ตัวแรก  
 **ไฟล์ข้อมูล:** [`data/Northwind_DW_DimFact.xlsx`](../../data/Northwind_DW_DimFact.xlsx)  
-**ผลลัพธ์ตอนจบบท:** มีโมเดล 6 ตาราง + relationships + `[Sales Amount]` พร้อม slicer ปีกรองยอดได้
+**ผลลัพธ์ตอนจบบท:** มีโมเดลความสัมพันธ์ 6 ตารางที่ถูกต้อง + Relationships + `[Sales Amount]` พร้อม Slicer ปีกรองยอดขายได้สมบูรณ์
 
 ---
 
-## ทำไมต้องเริ่มที่โมเดล ไม่ใช่ที่สูตร
+## ทำไมต้องเริ่มที่โมเดล ไม่ใช่เริ่มที่การเขียนสูตร?
 
-DAX ทำงานบน **filter context** ที่วิ่งตาม relationship  
-ถ้าโมเดลเป็น flat / snowflake / คีย์ข้อความ / ไม่มี Date table ที่ถูกต้อง — สูตร Time Intelligence และ CALCULATE จะพังหรือช้าโดยไม่จำเป็น
+ในการทำงานจริงของ Data Analyst และ BI Developer ข้อผิดพลาดอันดับหนึ่งไม่ได้เกิดจากการเขียนสูตร DAX ไม่เป็น แต่เกิดจาก **"การจัดวางโครงสร้างตารางข้อมูลผิดตั้งแต่ต้น"**
 
-คอร์สนี้ใช้ **Northwind DW** (star สำเร็จรูป) เป็นโมเดลหลักตลอดหลักสูตร
+DAX ทำงานโดยอาศัยกลไกการกรองข้อมูลที่เรียกว่า **Filter Context** ซึ่งส่งผ่านตามเส้นเชื่อมโยงความสัมพันธ์ (**Relationship**)  
+ถ้าเราเอาข้อมูลทุกอย่างมารวมเป็นตารางแบนๆ ผืนเดียว (Flat Table) หรือต่อตารางซ้อนกันหลายชั้นเป็นเกล็ดหิมะ (Snowflake Schema) หรือใช้ข้อความยาวๆ เป็นตัวเชื่อมโยงตาราง แทนที่จะเป็นตัวเลข — โมเดลจะทำงานช้า กินแรมมหาศาล และสูตรวิเคราะห์วันเวลา (Time Intelligence) จะคำนวณผิดพลาดทันที
+
+หลักสูตรนี้จึงใช้ **Northwind Data Warehouse (Star Schema)** ที่ออกแบบมาถูกต้องตามมาตรฐานสากลเป็นโมเดลหลักตลอดทั้งคอร์ส
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): Star Schema คือระบบสุริยะจักรวาล**  
+> - **Fact Table (ตารางข้อเท็จจริง):** เปรียบเหมือน **"ดวงอาทิตย์"** ที่อยู่ตรงกลาง บันทึกเหตุการณ์หรือธุรกรรมที่เกิดขึ้นซ้ำๆ ในชีวิตประจำวัน เช่น ใบเสร็จขายสินค้า ซึ่งมีปริมาณแถวเยอะมากๆ ในตารางนี้จะมีตัวเลขยอดเงิน ปริมาณ และตัวเลขรหัสเชื่อมโยง  
+> - **Dimension Tables (ตารางมิติ/ตารางอ้างอิง):** เปรียบเหมือน **"ดาวเคราะห์บริวาร"** ที่โคจรรอบดวงอาทิตย์ เป็นเสมือนสมุดทะเบียนประวัติ เช่น ทะเบียนรายชื่อลูกค้า แคตตาล็อกสินค้า รายชื่อพนักงาน และปฏิทินวันที่ ซึ่งทำหน้าที่ให้คำอธิบายว่า "ใคร (Who), ทำอะไร (What), ที่ไหน (Where), เมื่อไร (When)"
 
 ---
 
 ## โครงสร้างข้อมูล (อ่านก่อน Import)
 
-| ตาราง | บทบาท | Grain / หมายเหตุ |
-| --- | --- | --- |
-| `FactSales` | Fact | **1 แถว = 1 order line** มี `SalesAmount`, `Profit`, `LineCost` (Fixed Decimal) |
-| `DimDate` | Date dim | contiguous dates; มีปฏิทิน + Fiscal (เริ่ม 1 ต.ค.) |
-| `DimCustomer` | Dim | Country, Segment, Customer |
-| `DimEmployee` | Dim | First/Last name, BirthDate, HireDate, Department, Level |
-| `DimProduct` | Dim | Category, Supplier (denormalized), ListPrice, Status, ProductCode |
-| `DimShipper` | Dim | บริษัทขนส่ง |
+| ตาราง | บทบาท | Grain (ระดับความละเอียดของข้อมูล) / คำอธิบาย |
+| :--- | :--- | :--- |
+| `FactSales` | **Fact** | **1 แถว = 1 order line (แถวสินค้าในบิล)** มีตัวเลขวัดผล `SalesAmount`, `Profit`, `LineCost` (ชนิด Fixed Decimal) |
+| `DimDate` | **Date Dim** | วันที่ต่อเนื่องกันครบทุกวัน (**Contiguous Dates**); มีทั้งปฏิทินสากล และปีงบประมาณ (Fiscal Year เริ่ม 1 ต.ค.) |
+| `DimCustomer` | **Dim** | ข้อมูลลูกค้า: ประเทศ (`Country`), กลุ่มลูกค้า (`Segment`), ชื่อบริษัทลูกค้า (`Customer`) |
+| `DimEmployee` | **Dim** | ข้อมูลพนักงานขาย: ชื่อ-นามสกุล, วันเกิด, วันเริ่มงาน, แผนก, ตำแหน่ง |
+| `DimProduct` | **Dim** | ข้อมูลสินค้า: หมวดหมู่ (`Category`), ชื่อผู้ผลิต (`Supplier`), ราคาป้าย (`ListPrice`), สถานะสินค้า |
+| `DimShipper` | **Dim** | ข้อมูลบริษัทขนส่ง: รหัสและชื่อบริษัทขนส่งสินค้า |
 
-ชีตที่ขึ้นต้นด้วย `_` (`_Columns`, `_Measures`, `_Relationships`, `_QA`, …) เป็น **เอกสารสำหรับมนุษย์/pytest** — **อย่า Import** เข้าโมเดล
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): "Grain" คือความละเอียดของกล้องจุลทรรศน์**  
+> คำว่า **Grain (ระดับเกรนของข้อมูล)** หมายถึง "1 แถวในตารางแทนสิ่งใดในโลกความจริง?"  
+> ใน `FactSales` เม็ดข้อมูลอยู่ที่ระดับ **Order Line (รายการสินค้าแต่ละชิ้นในบิล)** ไม่ใช่ทั้งใบเสร็จ (Order Header)  
+> เช่น ถ้าลูกค้า 1 คนเดินเข้าซูเปอร์มาร์เก็ต ซื้อนม 1 กล่อง และขนมปัง 1 ชิ้น ใบเสร็จ 1 ใบนี้จะกลายเป็น **2 แถว** ใน `FactSales` ทันที การรู้ Grain ชัดเจนจะช่วยป้องกันไม่ให้เราคำนวณตัวเลขซ้ำซ้อน
 
-> **Best practice:** Star schema + integer surrogate keys (`*Key`) แล้วซ่อนจาก Report view  
-> อ้าง: [Star schema](https://learn.microsoft.com/power-bi/guidance/star-schema)
+> ⚠️ **ข้อควรระวัง:** ชีตในไฟล์ Excel ที่ขึ้นต้นด้วยขีดล่าง `_` (เช่น `_Columns`, `_Measures`, `_Relationships`, `_QA`) เป็น **เอกสารกำกับสำหรับมนุษย์และชุดทดสอบอัตโนมัติ (pytest)** — **ห้าม Import เข้าโมเดลเด็ดขาด**
+
+> **Best Practice:** ใช้โครงสร้างแบบ **Star schema** ร่วมกับรหัสตัวเลขแทนข้อมูล (**Integer Surrogate Keys** เช่น `*Key`) เสมอ แล้วทำการซ่อนคอลัมน์คีย์เหล่านี้จากหน้า Report View  
+> *อ้างอิง:* [Microsoft Learn: Understand star schema and the importance for Power BI](https://learn.microsoft.com/power-bi/guidance/star-schema)
 
 ---
 
-## ขั้นตอนทีละคลิก
+## ขั้นตอนปฏิบัติทีละคลิก (Step-by-Step)
 
-### 1) Get Data
-
-1. เปิด Power BI Desktop → **Get Data → Excel workbook**
-2. เลือก `data/Northwind_DW_DimFact.xlsx`
-3. ใน Navigator เลือกเฉพาะ **Tables** (ไอคอนตาราง):  
+### 1) การนำเข้าข้อมูล (Get Data)
+1. เปิดโปรแกรม Power BI Desktop → คลิกที่ **Get Data → Excel workbook**
+2. เลือกไฟล์ `data/Northwind_DW_DimFact.xlsx`
+3. ในหน้าต่าง Navigator ให้ติ๊กเลือกเฉพาะ **Tables** (สังเกตไอคอนรูปตารางสีฟ้า):  
    `DimDate`, `DimCustomer`, `DimEmployee`, `DimProduct`, `DimShipper`, `FactSales`
-4. **Load** (หรือ Transform แล้ว Close & Apply ถ้าต้องการตรวจชนิดข้อมูล)
+4. คลิก **Load** (หรือคลิก Transform Data เพื่อเข้า Power Query ไปตรวจสอบชนิดข้อมูล แล้วคลิก Close & Apply)
 
-### 2) ปิด Auto date/time
+### 2) ปิดระบบ Auto date/time (กฎเหล็กของโมเดลระดับมืออาชีพ)
+1. ไปที่เมนู **File → Options and settings → Options**
+2. ภายใต้หัวข้อ **Current File → Data Load → Time intelligence**
+3. เอาเครื่องหมายถูกออกจากช่อง **Auto date/time**  
+   *(คำแนะนำ: แนะนำให้ปิดที่หัวข้อ Global → Data Load ด้วย เพื่อไม่ให้เปิดขึ้นมาเองในไฟล์ใหม่อื่นๆ)*
 
-1. **File → Options and settings → Options**
-2. **Current File → Data Load → Time intelligence**
-3. ยกเลิก **Auto date/time**  
-   (แนะนำปิดที่ Global ด้วยถ้าสอนห้องเดียวกันทั้งคอร์ส)
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): ทำไมต้องปิด Auto date/time?**  
+> ถ้าเราไม่ปิด Power BI จะแอบสร้างตารางปฏิทินซ่อนไว้ข้างหลังให้กับ "ทุกคอลัมน์ที่มีชนิดเป็นวันที่" ในไฟล์ เปรียบเหมือนทุกคนในห้องเรียนต่างคนต่างพกปฏิทินคนละเล่ม ซึ่งนอกจากจะเปลืองหน่วยความจำ (RAM) อย่างมากแล้ว ยังทำให้สูตรคำนวณวันเวลาสับสน  
+> การปิด Auto date/time แล้วใช้ตาราง `DimDate` เพียงตารางเดียว เปรียบเสมือนการติดตั้ง **"นาฬิกากลางประจำห้องเรียน"** ที่ทุกคนใช้อ้างอิงเวลาตรงกันอย่างแม่นยำ
 
-ถ้าไม่ปิด Power BI จะสร้างตารางวันที่ซ่อนต่อคอลัมน์วันที่ → ซ้ำกับ `DimDate` และทำให้ Time Intelligence สับสน
+### 3) ตรวจสอบและสร้างความสัมพันธ์ (Relationships)
+สลับไปที่มุมมอง **Model view** ตรวจสอบหรือลากเส้นความสัมพันธ์ตามตารางด้านล่างนี้ (อ้างอิงตามชีต `_Relationships`):
 
-### 3) Relationships
+| จากตาราง (From: Many ฝั่งลูกศร) | ไปยังตาราง (To: One ฝั่งเลข 1) | สถานะ Active? | ความหมายทางธุรกิจ |
+| :--- | :--- | :---: | :--- |
+| `FactSales[ProductKey]` | `DimProduct[ProductKey]` | **Yes** | สินค้าที่ขาย |
+| `FactSales[CustomerKey]` | `DimCustomer[CustomerKey]` | **Yes** | ลูกค้าผู้ซื้อ |
+| `FactSales[EmployeeKey]` | `DimEmployee[EmployeeKey]` | **Yes** | พนักงานผู้ปิดการขาย |
+| `FactSales[ShipperKey]` | `DimShipper[ShipperKey]` | **Yes** | บริษัทที่ใช้จัดส่ง |
+| `FactSales[OrderDateKey]` | `DimDate[DateKey]` | **Yes (Active)** | วันที่สั่งซื้อสินค้า (เส้นหลักของระบบ) |
+| `FactSales[RequiredDateKey]` | `DimDate[DateKey]` | **No (Inactive)** | วันที่นัดส่งสินค้าตามกำหนด |
+| `FactSales[ShippedDateKey]` | `DimDate[DateKey]` | **No (Inactive)** | วันที่ส่งสินค้าออกจริง |
 
-ไป **Model view** ตรวจ/สร้างตามตารางนี้ (ชีต `_Relationships` ใน Excel เป็นแหล่งอ้างอิงเดียวกัน):
+- **Cardinality (ความสัมพันธ์):** Many-to-one (`* : 1`)
+- **Cross-filter direction:** **Single** (ทิศทางลูกศรชี้จาก Dim ไหลไปกรอง Fact เสมอ)
 
-| From (many) | To (one) | Active | ความหมาย |
-| --- | --- | --- | --- |
-| `FactSales[ProductKey]` | `DimProduct[ProductKey]` | Yes | สินค้า |
-| `FactSales[CustomerKey]` | `DimCustomer[CustomerKey]` | Yes | ลูกค้า |
-| `FactSales[EmployeeKey]` | `DimEmployee[EmployeeKey]` | Yes | พนักงานขาย |
-| `FactSales[ShipperKey]` | `DimShipper[ShipperKey]` | Yes | ขนส่ง |
-| `FactSales[OrderDateKey]` | `DimDate[DateKey]` | **Yes** | วันที่สั่ง (หลัก) |
-| `FactSales[RequiredDateKey]` | `DimDate[DateKey]` | No | วันกำหนดส่ง |
-| `FactSales[ShippedDateKey]` | `DimDate[DateKey]` | No | วันส่งจริง |
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): ทิศทางลูกศร Single Cross-Filter**  
+> เปรียบเสมือน **"ทางน้ำไหลจากภูเขาสู่ đồng bằng"** กฎพื้นฐานคือ เมื่อผู้ใช้เลือกตัวกรองที่ตารางข้อมูลอ้างอิง (Dim) เช่น เลือก "ประเทศเยอรมนี" แรงกรองจะไหลตามลูกศรไปบีบตารางยอดขาย (Fact) ให้เหลือเฉพาะยอดของเยอรมนีทันที
 
-Cardinality: Many-to-one · Cross-filter: **Single** (Dim → Fact)
+### 4) กำหนดให้เป็น Date Table ทางการ (Mark as Date Table)
+1. ในหน้า Model view หรือ Data view ให้คลิกขวาที่ชื่อตาราง `DimDate`
+2. เลือก **Mark as date table → Mark as date table**
+3. ในช่อง Date column ให้เลือกคอลัมน์ `Date` แล้วกด OK
+4. *เงื่อนไขสำคัญ:* คอลัมน์นี้ต้องเป็นชนิดข้อมูลแบบ Date แท้, ไม่มีค่าว่าง, และต้องมีวันที่เรียงต่อเนื่องกันไม่ขาดตอน
 
-### 4) Mark as Date Table
+### 5) ซ่อนคอลัมน์คีย์เชื่อมโยง (Hide Keys / Foreign Keys)
+1. คลิกขวาที่คอลัมน์ที่ลงท้ายด้วย `*Key` ทั้งหมดในตาราง `FactSales` และตาราง `Dim*` ต่างๆ
+2. เลือก **Hide in report view**  
+*(เพราะผู้บริหารและผู้ใช้รายงานต้องการเลือกดู "ชื่อลูกค้า" หรือ "ชื่อสินค้า" ไม่ได้ต้องการดูตัวเลขรหัสระบบ)*
 
-คลิกขวา `DimDate` → **Mark as date table** → คอลัมน์ `Date`  
-ต้องเป็นชนิด Date, ไม่มีช่องว่างในช่วงวัน, ไม่ซ้ำ
-
-### 5) ซ่อน Keys / FK
-
-ซ่อนคอลัมน์ที่ `_Columns` ระบุ `Hidden = TRUE` โดยเฉพาะ `*Key` บน Fact และ Dim  
-ผู้ใช้รายงานเลือกชื่อธุรกิจ (Customer, ProductName) ไม่ใช่ตัวเลข surrogate
-
-### 6) Measure แรก + Discourage implicit measures
-
-ใน Report view เลือกตาราง `FactSales` → New measure:
-
-```dax
-Sales Amount = SUM ( FactSales[SalesAmount] )
-```
-
-แนะนำทันที: Model view → โมเดล → เปิด **Discourage implicit measures**  
-บังคับให้ทุกตัวเลขบน visual เป็น explicit measure (จำเป็นก่อนบท 11 Calculation Groups)
-
-> **Best practice:** Explicit measures ตั้งแต่ชั่วโมงแรก + ปิด Auto date/time  
-> อ้าง: [Import modeling data reduction](https://learn.microsoft.com/power-bi/guidance/import-modeling-data-reduction)
-
----
-
-## สิ่งที่ต้องจำ
-
-- Grain Fact = order **line** ไม่ใช่ order header
-- Supplier อยู่บน `DimProduct` แล้ว — **ไม่มี** ตาราง SUPPLIERS แยก (ไม่สอน snowflake ใน lab)
-- `FactSales[LineCost]` **ออกแบบให้ไม่เท่า** `StandardCost * Quantity` — ใช้เทียบในบท 05
-- แคตตาล็อก measure เต็ม: [`dax/measures.dax`](../../dax/measures.dax)
-
----
-
-## Lab 01 — ติดตั้งโมเดล (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. Import 6 ตารางจากไฟล์ใน `data/`
-2. ปิด Auto date/time ของไฟล์นี้
-3. Mark `DimDate[Date]` as Date Table
-4. มี relationship ไป `DimDate` 3 เส้น (1 active, 2 inactive)
-5. สร้าง `[Sales Amount]`
-6. Card + Slicer `DimDate[Year]` — กรองยอดได้
-
-### เฉลย
-
-- Relationships ตามตารางด้านบน / ชีต `_Relationships`
-- สูตร:
+### 6) สร้าง Explicit Measure ตัวแรก + เปิดโหมด Discourage Implicit Measures
+1. สลับไปที่ **Report view** คลิกขวาที่ตาราง `FactSales` → เลือก **New measure**
+2. พิมพ์สูตร DAX ดังนี้:
 
 ```dax
 Sales Amount = SUM ( FactSales[SalesAmount] )
 ```
 
-- ถ้า slicer ปีไม่กรอง: ตรวจว่า active relationship คือ `OrderDateKey` → `DimDate` และ visual ใช้ measure ไม่ใช่คอลัมน์ดิบ
+3. สลับไปที่ **Model view** → คลิกที่พื้นที่ว่างของโมเดลในหน้าต่าง Properties ทางขวา → เลื่อนลงมาเปิดสวิตช์ **Discourage implicit measures** ให้เป็น **On**  
+*(คำสั่งนี้จะปิดการลากคอลัมน์ตัวเลขไปหยอดลงกราฟแล้วให้โปรแกรมเดาใจหาผลรวมอัตโนมัติ บังคับให้ทุกคนต้องใช้ Measure ที่ประกาศสูตรไว้อย่างเป็นทางการเท่านั้น ซึ่งจำเป็นมากสำหรับโมเดลระดับองค์กร)*
 
-### เกณฑ์ผ่าน
-
-- Model view เห็น star ชัด (Fact กลาง, Dim รอบ)
-- มี explicit `[Sales Amount]`
-- Slicer ปีจาก `DimDate` กรอง Card ได้
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): Implicit vs. Explicit Measure**  
+> - **Implicit Measure (การเดาใจ):** เหมือนการสั่งอาหารว่า "เอาข้าวมาจานนึง" แล้วให้พ่อครัวเดาเอาเองว่าเราอยากกินอะไร เสี่ยงต่อความผิดพลาดและควบคุมมาตรฐานไม่ได้  
+> - **Explicit Measure (การประกาศทางการ):** เหมือนการเขียนระบุชื่อเมนูและสูตรอย่างชัดเจนลงในสมุดเมนู เช่น `[Sales Amount] = SUM(FactSales[SalesAmount])` ทุกคนหยิบไปใช้จะได้ผลลัพธ์ที่ถูกต้อง โปร่งใส และนำไปต่อยอดในสูตรชั้นสูงได้
 
 ---
 
-**ถัดไป:** [02 — DAX syntax และ Context](02-dax-syntax-and-context.md)
+## สิ่งที่ต้องจดจำขึ้นใจสำหรับ Data / Business Analyst
+1. **Grain ของ Fact:** 1 แถวคือ Order Line (รายการสินค้าแต่ละชิ้นในบิล)
+2. **Denormalization ใน Star Schema:** ข้อมูลผู้ผลิต (Supplier) ถูกรวบรวมเข้ามาไว้ใน `DimProduct` เรียบร้อยแล้ว จึงไม่มีตาราง `Suppliers` แยกอีก ช่วยลดขั้นตอนการเชื่อมโยงตารางหลายชั้น
+3. **LineCost ไม่เท่ากับ StandardCost × Quantity:** ใน `FactSales` เราได้บันทึกต้นทุนจริงหน้างานไว้ในคอลัมน์ `LineCost` แล้ว เพื่อใช้เปรียบเทียบประสิทธิภาพกับการคำนวณแบบวนลูปในบทที่ 05
+
+---
+
+## Lab 01 — ติดตั้งโมเดลและทดสอบการทำงาน (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. นำเข้าตารางทั้ง 6 ตารางจากไฟล์ Excel `data/Northwind_DW_DimFact.xlsx`
+2. ปิดตัวเลือก Auto date/time ของไฟล์นี้
+3. กำหนด `DimDate[Date]` ให้เป็น Date Table ทางการ
+4. เชื่อมโยง Relationships ไปยัง `DimDate` จำนวน 3 เส้น (Active 1 เส้นคือ OrderDateKey, Inactive 2 เส้น)
+5. เขียนสูตร Measure `[Sales Amount]`
+6. สร้างการ์ด (Card Visual) แสดง `[Sales Amount]` และสร้างตัวเลือก (Slicer) ด้วย `DimDate[Year]` เพื่อทดสอบว่าเมื่อคลิกเปลี่ยนปี ตัวเลขยอดขายเปลี่ยนตามถูกต้องหรือไม่
+
+### แนวทางการตรวจและเฉลย
+- สูตร Measure ที่ถูกต้อง:
+```dax
+Sales Amount = SUM ( FactSales[SalesAmount] )
+```
+- **จุดสังเกต:** ถ้าคลิกเลือกปีบน Slicer แล้วตัวเลขบน Card ไม่ยอมเปลี่ยน ให้ตรวจสอบว่าเส้นเชื่อมโยงระหว่าง `FactSales[OrderDateKey]` กับ `DimDate[DateKey]` มีสถานะเป็นเส้นทึบ (**Active**) หรือไม่ และบน Card ได้หยิบ `[Sales Amount]` ไปวางจริงหรือไม่
+
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- ใน Model view มีตาราง 6 ตารางที่มีเส้นเชื่อมโยงแบบ Many-to-One ถูกต้องครบทุกเส้น
+- `DimDate` มีสัญลักษณ์รูปปฏิทินกำกับ (Mark as date table แล้ว)
+- มี Explicit Measure `[Sales Amount]` แสดงผลลัพธ์ได้ถูกต้องตามตัวกรองปี
+
+---
+
+**บทเรียนถัดไป:** [02 — DAX syntax และ Context](02-dax-syntax-and-context.md)

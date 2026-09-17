@@ -1,208 +1,104 @@
 # 11 — Calculation Groups
 
-**เป้าหมาย:** ลด measure ซ้ำด้วย `SELECTEDMEASURE()` ตาม Microsoft Learn — ใช้แพทเทิร์น Time Intelligence ชุดเดียวกับทุก explicit measure  
-**ข้อกำหนด:** จบบท 10; มี `[Sales Amount]` และ `[Sales Quantity]`
-
-อ้างอิงหลัก: [Create calculation groups in Power BI](https://learn.microsoft.com/power-bi/transform-model/calculation-groups)
+**เป้าหมาย:** กำจัดปัญหา Measure Explosion จากบทที่ 10 โดยสิ้นเชิงด้วยการสร้าง **Calculation Groups**, เข้าใจการทำงานของฟังก์ชันอเนกประสงค์ `SELECTEDMEASURE()`, และกำหนดรูปแบบการแสดงผลแบบไดนามิกด้วย Format String Expressions  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 10 เรียบร้อยแล้ว และใน Model view ได้เปิดตัวเลือก **Discourage implicit measures** เป็น On แล้ว
 
 ---
 
-## ทำไมต้องมี (จากบท 10)
+## Calculation Groups คืออะไร?
 
-YTD / PY / YoY × ทุก base measure = **measure explosion**  
-Calculation group = หนึ่งชุด calculation items ที่ **ห่อ** measure ที่ถูกเลือกบน visual
+Calculation Groups คือฟีเจอร์ระดับสูงของ Semantic Model ที่ช่วยเปลี่ยนวิธีคิดและวิธีเขียน DAX ของเราไปตลอดกาล  
+มันทำหน้าที่เป็น **"แม่พิมพ์ตรรกะอเนกประสงค์"** ที่สามารถนำไปสวมทับ Measure ใดๆ ในโมเดลก็ได้!
 
-| แนวคิด | ความหมาย |
-| --- | --- |
-| Calculation group | ตารางพิเศษในโมเดล (เช่น `Time Intelligence`) |
-| Calculation item | สูตร เช่น YTD, PY ที่ใช้ `SELECTEDMEASURE()` |
-| `SELECTEDMEASURE()` | measure ที่อยู่ใน Values ของ visual ตอนนั้น |
-
-**คนละงานกับ Field parameters (บท 12):** calc group **แปลง** measure เดิม; field parameter **สลับ** ว่าจะเอา field ไหนขึ้น visual
-
----
-
-## Setup ใน Power BI Desktop
-
-1. ไป **Model view**
-2. โฮมริบบอน → **Calculation group**
-3. เมื่อถูกถามให้เปิด **Discourage implicit measures** → **Yes**  
-   (ถ้ายังไม่เปิดจากบท 01 — เปิดตอนนี้; calc item **ไม่ทำงาน** กับ implicit measure)
-4. ชื่อตาราง: `Time Intelligence`  
-   ชื่อคอลัมน์: `Time Calculation`
-5. สร้าง items ตามด้านล่าง  
-   หรือเปิด **TMDL view** แล้วใช้สคริปต์ [`dax/calculation-groups.tmdl`](../../dax/calculation-groups.tmdl)
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): แผ่นฟิลเตอร์สีสวมทับหน้าเลนส์กล้อง**  
+> ลองนึกภาพตากล้องที่มีเลนส์กล้องหลายตัว: เลนส์ยอดขาย, เลนส์ต้นทุน, เลนส์กำไร  
+> แทนที่ตากล้องจะต้องไปสั่งทำ "เลนส์ยอดขายแบบติดฟิลเตอร์ขาวดำ", "เลนส์ต้นทุนแบบติดฟิลเตอร์ขาวดำ" แยกเป็นชิ้นๆ  
+> ตากล้องคนนี้แค่ซื้อ **"แผ่นฟิลเตอร์ขาวดำ" (Calculation Item)** มาแผ่นเดียว  
+> เมื่อต้องการดูภาพขาวดำ ก็นำแผ่นฟิลเตอร์นี้ไป **สวมทับหน้าเลนส์ตัวไหนก็ได้ทันที!**  
+> ฟังก์ชัน **`SELECTEDMEASURE()`** ก็คือคำสั่งที่แปลว่า *"ไม่ว่าตอนนี้ผู้ใช้จะหยิบเลนส์ Measure อะไรมาส่อง ให้เอาสูตรคำนวณนี้ไปครอบทับเลนส์นั้นทันที!"*
 
 ---
 
-## Calculation items ที่ต้องมี
+## โครงสร้างของ Time Intelligence Calculation Group
 
-ห่อด้วย `ISNUMERIC ( SELECTEDMEASURE () )` เพื่อไม่พังเมื่อ Values เป็น measure ข้อความ/title
+เราสร้าง Calculation Group ขึ้นมา 1 กลุ่ม (เช่น ตั้งชื่อว่า `Time Intelligence`) ภายในจะมีตารางเสมือนที่มีคอลัมน์ชื่อ `CalculationItem` ซึ่งประกอบด้วยรายการทางเลือกดังนี้:
 
-### Current
+| Calculation Item (แผ่นฟิลเตอร์) | นิพจน์ DAX Expression (สิ่งที่ทำกับ Measure) | Format String Expression (รูปแบบตัวเลข) |
+| :--- | :--- | :--- |
+| **Current** | `SELECTEDMEASURE()` | `SELECTEDMEASUREFORMATSTRING()` |
+| **YTD** | `TOTALYTD ( SELECTEDMEASURE(), DimDate[Date] )` | `SELECTEDMEASUREFORMATSTRING()` |
+| **PY** | `CALCULATE ( SELECTEDMEASURE(), SAMEPERIODLASTYEAR ( DimDate[Date] ) )` | `SELECTEDMEASUREFORMATSTRING()` |
+| **YoY** | `SELECTEDMEASURE() - CALCULATE ( SELECTEDMEASURE(), SAMEPERIODLASTYEAR ( DimDate[Date] ) )` | `SELECTEDMEASUREFORMATSTRING()` |
+| **YoY %** | `DIVIDE ( ...คำนวณส่วนต่าง..., ...คำนวณ PY... )` | `"0.0%"` *(บังคับแปลงเป็นเปอร์เซ็นต์อัตโนมัติ)* |
 
-```dax
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    SELECTEDMEASURE (),
-    SELECTEDMEASURE ()
-)
-```
+---
 
-### MTD / QTD / YTD
+## ข้อกำหนดทางสถาปัตยกรรม: ทำไมต้องเปิด Discourage Implicit Measures?
 
-```dax
--- YTD (MTD/QTD แทน DATESMTD / DATESQTD)
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    CALCULATE ( SELECTEDMEASURE (), DATESYTD ( DimDate[Date] ) ),
-    SELECTEDMEASURE ()
-)
-```
+ในการใช้งาน Calculation Groups ระบบ Power BI มีข้อกำหนดเข้มงวดว่า **โมเดลนั้นต้องเปิดโหมด "Discourage implicit measures" (ไม่อนุญาตให้ใช้ Implicit Measure)**  
+เพราะถ้าผู้ใช้ลากคอลัมน์ตัวเลขดิบไปวางบน Visual แล้วให้โปรแกรมเดาใจหาผลรวม แผ่นฟิลเตอร์ของ Calculation Group จะไม่สามารถทำงานได้อย่างถูกต้องสมบูรณ์ มันต้องการทำงานร่วมกับ **Explicit Measure ที่ประกาศสูตรไว้อย่างเป็นทางการเท่านั้น**
 
-### PY
+---
 
-```dax
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    CALCULATE ( SELECTEDMEASURE (), SAMEPERIODLASTYEAR ( DimDate[Date] ) ),
-    SELECTEDMEASURE ()
-)
-```
+## ตัวอย่างโค้ดในรูปแบบ TMDL (Tabular Model Definition Language)
 
-### YOY
+ใน Power BI ยุคปัจจุบันและ Fabric เราสามารถประกาศ Calculation Group ผ่านไฟล์สคริปต์ TMDL ได้ดังนี้ (ดูไฟล์ต้นฉบับเต็มได้ที่ [`dax/calculation-groups.tmdl`](../../dax/calculation-groups.tmdl)):
 
-```dax
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    SELECTEDMEASURE ()
-        - CALCULATE (
-            SELECTEDMEASURE (),
-            'Time Intelligence'[Time Calculation] = "PY"
-        ),
-    SELECTEDMEASURE ()
-)
-```
+```tmdl
+table 'Time Intelligence'
+	calculationGroup
+		precedence: 0
 
-### YOY% + dynamic format string
+		calculationItem Current = SELECTEDMEASURE()
 
-สูตร:
+		calculationItem YTD = TOTALYTD ( SELECTEDMEASURE(), DimDate[Date] )
 
-```dax
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    DIVIDE (
-        CALCULATE (
-            SELECTEDMEASURE (),
-            'Time Intelligence'[Time Calculation] = "YOY"
-        ),
-        CALCULATE (
-            SELECTEDMEASURE (),
-            'Time Intelligence'[Time Calculation] = "PY"
-        )
-    ),
-    SELECTEDMEASURE ()
-)
-```
+		calculationItem PY =
+				CALCULATE (
+				    SELECTEDMEASURE(),
+				    SAMEPERIODLASTYEAR ( DimDate[Date] )
+				)
 
-ตั้ง **Format string** ของ item YOY% เป็น:
+		calculationItem YoY =
+				VAR PriorYear =
+				    CALCULATE (
+				        SELECTEDMEASURE(),
+				        SAMEPERIODLASTYEAR ( DimDate[Date] )
+				    )
+				RETURN
+				    SELECTEDMEASURE() - PriorYear
 
-```text
-#,##0.00%
-```
-
-(ใน Model view ที่ calculation item หรือผ่าน TMDL `formatStringDefinition`)
-
-### FYTD
-
-```dax
-IF (
-    ISNUMERIC ( SELECTEDMEASURE () ),
-    TOTALYTD ( SELECTEDMEASURE (), DimDate[Date], "09/30" ),
-    SELECTEDMEASURE ()
-)
+		calculationItem 'YoY %' =
+				VAR CurrentValue = SELECTEDMEASURE()
+				VAR PriorYear =
+				    CALCULATE (
+				        SELECTEDMEASURE(),
+				        SAMEPERIODLASTYEAR ( DimDate[Date] )
+				    )
+				VAR Diff = CurrentValue - PriorYear
+				RETURN
+				    DIVIDE ( Diff, PriorYear )
+			formatStringDefinition = "0.0%"
 ```
 
 ---
 
-## ใช้ในรายงาน
+## Lab 11 — สร้างและทดสอบ Calculation Group (โจทย์ + เฉลย)
 
-**แบบ Matrix**
+### โจทย์ปฏิบัติ
+1. ในหน้า Model view ของ Power BI Desktop คลิกสร้าง **Calculation group** ใหม่ (ตั้งชื่อกลุ่มว่า `Time Intelligence` และตั้งชื่อคอลัมน์ว่า `Time Calculation`)
+2. สร้าง Calculation Items ให้ครบ 5 ตัว: `Current`, `YTD`, `PY`, `YoY`, และ `YoY %` ตามนิพจน์ด้านบน
+3. ที่ไอเทม `YoY %` ให้คลิกตั้งค่า **Format string expression** ระบุเป็น `"0.0%"`
+4. สร้างตาราง Matrix:
+   - นำ `DimDate[MonthName]` มาวางที่ Rows
+   - นำ `Time Calculation` (จาก Calculation Group) มาวางที่ Columns
+   - นำ Measure `[Sales Amount]` ตัวเดียวไปวางที่ Values
+5. จากนั้นลองลาก Measure `[Profit]` และ `[Orders]` สลับลงไปวางแทนที่ แล้วสังเกตความมหัศจรรย์ของผลลัพธ์!
 
-- Rows: `DimDate[MonthName]` (หรือ hierarchy)
-- Columns: `Time Intelligence[Time Calculation]`
-- Values: `[Sales Amount]`
-
-สลับ Values เป็น `[Sales Quantity]` — **ห้าม** สร้าง `Sales Quantity YTD` ใหม่
-
-**แบบ Slicer**
-
-- Slicer บน `Time Calculation`
-- Values ใส่หลาย measure พร้อมกัน
-
-### ทดสอบใน DAX query view
-
-```dax
-EVALUATE
-SUMMARIZECOLUMNS (
-    DimDate[Year],
-    'Time Intelligence'[Time Calculation],
-    "Sales", [Sales Amount]
-)
-```
-
-ตรวจว่าแต่ละ item คืนค่าสมเหตุสมผล
+### การสังเกตและผลลัพธ์
+- โดยที่คุณไม่ต้องเขียนสูตร `[Profit YTD]` หรือ `[Orders PY]` เพิ่มแม้แต่สูตรเดียว ตาราง Matrix จะสามารถแตกผลลัพธ์ YTD, PY, YoY และ YoY % ของทั้งกำไรและจำนวนออเดอร์ออกมาได้อย่างถูกต้องสมบูรณ์ทันที
+- ช่องที่เป็น `YoY %` จะแสดงเครื่องหมาย `%` อัตโนมัติ ในขณะที่ช่องอื่นๆ ยังคงแสดงเป็นตัวเลขจำนวนเงินตามฟอร์แมตเดิมของตัวมันเอง
 
 ---
 
-## Precedence และ selection (ย่อ)
-
-- ถ้ามีหลาย calculation group ต้องตั้ง **precedence** (ตัวเลขสูงกว่าถูกใช้ก่อนตามเอกสาร AS/PBI)
-- กำหนดพฤติกรรมเมื่อไม่เลือก / เลือกหลาย item ได้ผ่าน selection expressions (ดู Learn — คอร์สนี้ใช้ค่าเริ่มต้น + สอนใน Matrix columns)
-
-> **Best practice:** Calculation groups สำหรับแพทเทิร์นซ้ำ; Field parameters สำหรับสลับ field  
-> อ้าง: [Calculation groups](https://learn.microsoft.com/power-bi/transform-model/calculation-groups) · [SELECTEDMEASURE](https://learn.microsoft.com/dax/selectedmeasure-function-dax) · [Precedence](https://learn.microsoft.com/analysis-services/tabular-models/calculation-groups#precedence)
-
----
-
-## แบบที่เลิกใช้เป็นคำตอบสุดท้าย (เคยอยู่ในสไลด์เก่า)
-
-```dax
--- disconnected table + SWITCH — สอนเป็น anti-pattern สำหรับ production
-Selected Measure =
-SWITCH (
-    SELECTEDVALUE ( 'Type'[TypeName] ),
-    "Total Sales", [Sales Amount],
-    "Total Sales YTD", [Sales Amount YTD],
-    [Sales Quantity]
-)
-```
-
-ใช้ฝึก disconnected table ได้ แต่ **ไม่ scale** และซ้ำกับ measure explosion
-
----
-
-## Lab 11 — Calculation Groups (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. เปิด Discourage implicit measures
-2. สร้าง calc group `Time Intelligence` ตามบทนี้หรือ TMDL
-3. Matrix: Month × Time Calculation × Sales Amount
-4. เปลี่ยน Values เป็น Sales Quantity โดยไม่สร้าง Quantity YTD ใหม่
-5. YOY% แสดงเป็นเปอร์เซ็นต์
-
-### เฉลย
-
-- UI: Model view → Calculation group หรือ apply [`dax/calculation-groups.tmdl`](../../dax/calculation-groups.tmdl)
-- Dynamic format YOY%: `#,##0.00%`
-- ถ้า item ไม่มีผล: ตรวจว่า Values เป็น explicit measure และ Date table ถูก Mark
-
-### เกณฑ์ผ่าน
-
-- Item เดียวกันใช้ได้ทั้ง `[Sales Amount]` และ `[Sales Quantity]`
-- ไม่มี measure ชื่อแบบ `Sales Quantity YTD` แยกสำหรับ lab นี้ (ชุดบท 10 เก็บไว้เทียบก็ได้)
-
----
-
-**ถัดไป:** [12 — Field Parameters](12-field-parameters.md)
+**บทเรียนถัดไป:** [12 — Field Parameters](12-field-parameters.md)

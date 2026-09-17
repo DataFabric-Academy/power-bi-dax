@@ -1,96 +1,92 @@
-# 05 — Aggregation และ Iterators (SUMX)
+# 05 — Aggregation และ Iterators
 
-**เป้าหมาย:** เข้าใจ Row Context ของ iterator — แล้วเลือก production path เป็น `SUM` ของคอลัมน์ที่ materialize  
-**ข้อกำหนด:** มี `[Sales Amount]`, `[Line Cost]` จากบท 04
+**เป้าหมาย:** แยกความแตกต่างระหว่าง Aggregation ทั่วไป (`SUM`) กับฟังก์ชันวนลูป Iterator (`SUMX`), เข้าใจการทำงานของ Storage Engine เทียบกับ Formula Engine, และเข้าใจเหตุผลทางสถาปัตยกรรมว่าทำไมระบบขนาดใหญ่จึงควรทำ Materialize ตัวเลขเตรียมไว้  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 04 เรียบร้อยแล้ว
 
 ---
 
-## สองทางไปยอดเดียวกัน (ไม่เสมอไป)
+## สองแนวทางในการคิดเลข: Aggregators vs Iterators
 
-### Production (ค่าเริ่มต้นที่ถูก)
+ในภาษา DAX เมื่อเราต้องการรวมผลลัพธ์ของตัวเลข เรามีเครื่องมือ 2 รูปแบบหลัก:
+
+### 1. Standard Aggregators (`SUM`, `AVERAGE`, `MIN`, `MAX`)
+ทำงานโดยตรงกับ **คอลัมน์เดี่ยวๆ ที่มีอยู่แล้วในตาราง**  
+ประมวลผลด้วย **Storage Engine (VertiPaq)** โดยตรง ซึ่งเป็นระดับเครื่องจักรที่เร็วที่สุด สามารถสแกนและรวมผลข้อมูลหลายสิบล้านแถวได้ภายในเสี้ยววินาที
 
 ```dax
 Sales Amount = SUM ( FactSales[SalesAmount] )
-Line Cost = SUM ( FactSales[LineCost] )
 ```
 
-`SalesAmount` / `LineCost` ถูกคำนวณที่ ETL แล้วเก็บเป็น Fixed Decimal → VertiPaq รวมเร็ว
-
-### Iterator (สอน Row Context)
+### 2. Iterators (ฟังก์ชันที่ลงท้ายด้วย X เช่น `SUMX`, `AVERAGEX`, `MINX`)
+ทำงานโดยการสร้าง **Row Context ชั่วคราวขึ้นมา แล้วเดินชี้คำนวณทีละแถว** ตามสูตรที่เราระบุไว้ จากนั้นจึงนำผลลัพธ์ที่ได้ของแต่ละแถวมารวมกันในขั้นตอนสุดท้าย
 
 ```dax
-Sales Amount (SUMX) =
+Sales Amount (Iterated) = 
+SUMX ( 
+    FactSales, 
+    FactSales[Quantity] * FactSales[UnitPrice] * ( 1 - FactSales[Discount] ) 
+)
+```
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): เครื่องคัดแยกเหรียญอัตโนมัติ vs พนักงานพร้อมกระดาษทด**  
+> - **`SUM` เปรียบเสมือน "เครื่องนับเหรียญอัตโนมัติ":** เมื่อคุณมีช่องใส่เหรียญ (คอลัมน์ `SalesAmount`) ที่เทเงินลงไป เครื่องจะหมุนนับยอดรวมทั้งหมดออกมาได้ทันที รวดเร็ว เงียบ และไม่เปลืองแรง  
+> - **`SUMX` เปรียบเสมือน "พนักงานคิดเลขที่ถือกระดาษทด":** พนักงานต้องเดินไปที่โต๊ะทีละแถว (สร้าง Row Context) หยิบจำนวนชิ้นมาคูณกับราคา ลบส่วนลด ได้ตัวเลขเท่าไหร่ก็จดใส่กระดาษทดไว้ในใจ พอเดินครบทุกแถวจนครบทั้งตาราง จึงค่อยเอายอดในกระดาษทดทั้งหมดมารวมเป็นก้อนสุดท้าย  
+> แน่นอนว่าถ้าตารางมีเพียง 1,000 แถว พนักงานอาจใช้เวลาเสี้ยววินาที แต่ถ้าตารางมี **10,000,000 แถว** พนักงานคนนี้จะต้องทดเลขสิบล้านครั้งทุกครั้งที่ผู้ใช้คลิกหน้าจอ!
+
+---
+
+## เบื้องหลังการประมวลผล: Formula Engine vs. Storage Engine
+
+- **Storage Engine (VertiPaq):** ทำงานแบบ Multithread ขนานกัน บีบอัดข้อมูลสูง และทำงานกับคอลัมน์ตรงๆ ได้เร็วระดับฟ้าผ่า
+- **Formula Engine:** เป็นสมองกลส่วนกลางที่คอยประมวลผลตรรกะที่ซับซ้อน การวนลูป (Iterate) มักจะดึงการประมวลผลมาทำงานที่ Formula Engine ซึ่งทำงานแบบ Single-thread เป็นหลัก ทำให้ใช้เวลานานกว่า
+
+> **Best Practice ระดับองค์กร (Enterprise Architecture):**  
+> สำหรับตัวเลขธุรกรรมหลักที่ต้องเรียกดูบ่อยๆ (เช่น มูลค่ายอดขายสุทธิ หรือต้นทุนสินค้า) ควรทำการคำนวณและเก็บเป็นคอลัมน์จริง (**Materialize**) มาให้เสร็จสิ้นตั้งแต่กระบวนการเตรียมข้อมูล (SQL / Data Warehouse / Power Query) เช่น คอลัมน์ `FactSales[SalesAmount]` และ `FactSales[LineCost]` เพื่อให้ใน Power BI เราสามารถใช้ฟังก์ชัน `SUM` ได้โดยตรง ช่วยให้แดชบอร์ดโหลดเร็ว ลื่นไหล แม้ข้อมูลจะมีขนาดมหาศาล
+
+---
+
+## เมื่อไหร่ที่จำเป็นต้องใช้ `SUMX`?
+
+แม้ `SUM` จะเร็วกว่า แต่มีหลายสถานการณ์ทางธุรกิจที่ `SUM` ธรรมดาทำไม่ได้ และจำเป็นต้องพึ่งพา `SUMX`:
+1. **เมื่อต้องคำนวณตัวเลขข้ามตารางตามเงื่อนไข:** เช่น การนำจำนวนสินค้าในตาราง Fact ไปคูณกับราคามาตรฐานในตารางสินค้าผ่านฟังก์ชัน `RELATED`:
+```dax
+Line Cost (Iterated) = 
+SUMX ( 
+    FactSales, 
+    FactSales[Quantity] * RELATED ( DimProduct[StandardCost] ) 
+)
+```
+2. **เมื่อต้องคำนวณบนตารางที่ถูกกรองชั่วคราว:** เช่น การใช้ `SUMX` ร่วมกับฟังก์ชัน `FILTER` หรือการหาผลรวมของตารางสรุปย่อย
+
+---
+
+## Lab 05 — เปรียบเทียบผลลัพธ์ระหว่าง SUM และ SUMX (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. สร้าง Measure `[Sales Amount (Iterated)]` ด้วย `SUMX` โดยคำนวณจาก:  
+   `FactSales[Quantity] * FactSales[UnitPrice] * ( 1 - FactSales[Discount] )`
+2. สร้าง Measure `[Line Cost (Iterated)]` ด้วย `SUMX` โดยนำ `FactSales[Quantity]` คูณกับ `RELATED(DimProduct[StandardCost])`
+3. นำ Measure ทั้งสองไปวางเปรียบเทียบกับ `[Sales Amount]` และ `[Total Cost]` เดิมใน Matrix เพื่อตรวจสอบความแตกต่างของตัวเลข
+
+### เฉลยสูตร
+```dax
+Sales Amount (Iterated) =
 SUMX (
     FactSales,
-    FactSales[UnitPrice] * FactSales[Quantity] * ( 1 - FactSales[Discount] )
+    FactSales[Quantity] * FactSales[UnitPrice] * ( 1 - FactSales[Discount] )
 )
-```
 
-`SUMX` สร้าง row context ทีละแถวของ `FactSales` แล้วรวมผล
-
-บน Northwind ค่า `[Sales Amount]` กับ `[Sales Amount (SUMX)]` ควรใกล้เคียง/ตรงกันถ้า ETL สอดคล้องสูตร
-
----
-
-## บทเรียนสำคัญ: LineCost ≠ StandardCost × Qty
-
-```dax
-Line Cost (from StandardCost) =
+Line Cost (Iterated) =
 SUMX (
     FactSales,
-    RELATED ( DimProduct[StandardCost] ) * FactSales[Quantity]
+    FactSales[Quantity] * RELATED ( DimProduct[StandardCost] )
 )
 ```
 
-เปรียบ Card ของ `[Line Cost]` กับ `[Line Cost (from StandardCost)]` — **ตัวเลขต่างกันโดยออกแบบ**
-
-เหตุผลสอน: อย่าสมมติว่า “ต้นทุนบน Fact = ต้นทุนบน Dim × จำนวน” โดยไม่ตรวจโมเดล  
-ในธุรกิจจริง LineCost อาจรวม overhead / landed cost
-
-> **Best practice:** Iterator แพงกว่า column aggregation บน VertiPaq — materialize ที่ ETL แล้ว `SUM`  
-> อ้าง: [Import modeling data reduction](https://learn.microsoft.com/power-bi/guidance/import-modeling-data-reduction)
+### การสังเกตและเกณฑ์การผ่าน
+- ตัวเลข `[Sales Amount]` และ `[Sales Amount (Iterated)]` จะมีค่าเท่ากันอย่างสมบูรณ์ (เพราะคอลัมน์ `SalesAmount` ถูกคำนวณด้วยสูตรเดียวกันไว้ล่วงหน้าแล้ว)
+- ตัวเลข `[Line Cost (Iterated)]` จะมีความแตกต่างจาก `[Total Cost]` เล็กน้อยในบางรายการ เนื่องจากในโมเดล Northwind DW นี้ ต้นทุนจริงหน้างาน (`LineCost`) สะท้อนราคาต้นทุน ณ วันที่เกิดรายการจริง ซึ่งอาจมีการเปลี่ยนแปลงไปจากราคามาตรฐานปัจจุบัน (`StandardCost`) ในตารางสินค้า
 
 ---
 
-## FILTER + AVERAGEX
-
-```dax
-Avg Active List Price =
-AVERAGEX (
-    FILTER ( DimProduct, DimProduct[Status] = "Active" ),
-    DimProduct[ListPrice]
-)
-
-Max Active List Price =
-MAXX (
-    FILTER ( DimProduct, DimProduct[Status] = "Active" ),
-    DimProduct[ListPrice]
-)
-```
-
-หมายเหตุบท 09: ใน `CALCULATE` ควรเลี่ยง `FILTER ( ทั้งตาราง )` เมื่อ Boolean filter ทำได้ — แต่ iterator ที่ต้องเดินแถวยังใช้ `FILTER` ได้ตามบริบท
-
----
-
-## Lab 05 — Iterators (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. สร้าง `[Sales Amount (SUMX)]` เทียบ `[Sales Amount]`
-2. สร้าง `[Line Cost (from StandardCost)]` เทียบ `[Line Cost]` — ต้อง **ต่าง**
-3. สร้าง `[Avg Active List Price]`
-4. เขียนหนึ่งประโยคว่าทำไม Line Cost สองแบบไม่เท่ากัน
-
-### เฉลย
-
-ใช้สูตรในบทนี้  
-คำตอบสั้น ๆ ที่ถูกต้อง: `FactSales[LineCost]` เป็นต้นทุนบรรทัดที่ materialize แยกจาก `DimProduct[StandardCost] * Quantity` — โมเดลตั้งใจให้ต่างเพื่อฝึกตรวจสอบสมมติฐาน
-
-### เกณฑ์ผ่าน
-
-- เห็นตัวเลข Line Cost สองแบบไม่เท่าบน Card
-- อธิบายเหตุผลได้โดยไม่อ้างว่า “สูตรผิด”
-
----
-
-**ถัดไป:** [06 — Logical / Text / Date](06-logical-text-date.md)
+**บทเรียนถัดไป:** [06 — Logical, Text, Date](06-logical-text-date.md)

@@ -3,6 +3,8 @@
 Best practice **ไม่ใช่บทท้าย** — แทรกเป็น callout ในทุกบทเรียน  
 อ้างอิงหลักจาก Microsoft Learn
 
+ดูภาพรวมหลักสูตร: [CURRICULUM.md](../CURRICULUM.md) · Semantic model: [semantic-model/README.md](../semantic-model/README.md)
+
 ## Modeling / VertiPaq
 
 | หลัก | ทำอะไร | Learn |

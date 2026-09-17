@@ -1,96 +1,101 @@
 # 04 — Measures
 
-**เป้าหมาย:** Explicit measure เป็นค่าเริ่มต้นของทุกตัวเลขบนรายงาน + ใช้ `DIVIDE` + จัด Display folder  
-**ข้อกำหนด:** จบบท 01–02
+**เป้าหมาย:** เข้าใจธรรมชาติของ Measure ซึ่งคำนวณแบบพลวัต ณ เวลาที่เรียกดูข้อมูล (Dynamic Calculation at Query Time), ฝึกเขียน Base Measures พื้นฐานของธุรกิจ, และใช้ฟังก์ชัน `DIVIDE` เพื่อป้องกันปัญหาการหารด้วยศูนย์ได้อย่างปลอดภัย  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 03 เรียบร้อยแล้ว
 
 ---
 
-## ทำไมต้อง Explicit measure
+## Measure คืออะไร และทำงานอย่างไร?
 
-ลาก `FactSales[SalesAmount]` ขึ้น Values = **implicit measure** (engine สร้าง `SUM` ให้ชั่วคราว)
+ถ้า Calculated Column คือการเขียนหมึกลงบนกระดาษอย่างถาวร...  
+**Measure คือ "สมองกลหรือสูตรในเครื่องคิดเลข"** ที่ไม่มีการจดบันทึกตัวเลขค้างไว้ในตารางเลยแม้แต่ไบต์เดียว!
 
-ปัญหา:
-
-- ชื่อไม่คงที่ / ควบคุม format ยาก
-- **Calculation groups ไม่ทำงาน** กับ implicit measure
-- นักเรียนก๊อปสูตรอ้างคอลัมน์ดิบแล้วสับสนกับ context
-
-ตั้ง **Discourage implicit measures** ตั้งแต่ต้นคอร์ส
-
-> **Best practice:** สร้าง measure ชัดเจน; เปิด Discourage implicit measures  
-> อ้าง: [Create measures](https://learn.microsoft.com/power-bi/transform-model/desktop-tutorial-create-measures) · [Calculation groups](https://learn.microsoft.com/power-bi/transform-model/calculation-groups)
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): Measure คือเครื่องคิดเลขสดตามคำสั่ง**  
+> ลองนึกภาพว่าคุณเป็นผู้บริหารเดินเข้าไปในห้องทำงาน แล้วถามว่า **"ปีนี้เราขายได้เท่าไหร่?"**  
+> Measure จะเริ่มทำงานทันที ณ วินาทีนั้น (Query Time):  
+> 1. มันจะก้มดูว่าตอนนี้คุณสวมแว่นกรองข้อมูลอะไรอยู่ (**Filter Context**) เช่น คุณกำลังชี้ที่ปี 2024 และสินค้าหมวด Beverages  
+> 2. มันจะร่อนข้อมูลเฉพาะส่วนนั้นขึ้นมา  
+> 3. จากนั้นจึงกดเครื่องคิดเลขคำนวณตัวเลขผลลัพธ์ออกมาให้คุณเห็นบนหน้าจอ  
+> 4. เมื่อคุณเปลี่ยนใจไปคลิกดูปี 2025 ตัวเลขเดิมจะหายไป และเครื่องคิดเลขจะคิดยอดใหม่ของปี 2025 ให้ทันที  
+> **ข้อดีมหาศาล:** ไม่กินเนื้อที่เก็บข้อมูล (RAM Footprint ต่ำมาก) และปรับเปลี่ยนผลลัพธ์ตามผู้ใช้งานได้อย่างยืดหยุ่น 100%
 
 ---
 
-## Base measures (คัดลอกได้)
+## กฎความปลอดภัยทางคณิตศาสตร์: ทำไมต้องใช้ `DIVIDE()` แทนเครื่องหมาย `/`?
 
-Home table แนะนำ: `FactSales` · Display folder เช่น `Sales`, `Volume`
+ในวิชาคณิตศาสตร์พื้นฐาน การหารตัวเลขด้วยศูนย์ เช่น $\frac{100}{0}$ เป็นสิ่งที่ **"ไม่นิยามทางคณิตศาสตร์" (Undefined)**  
+ในระบบคอมพิวเตอร์ ถ้าเราเขียนสูตรแบบดั้งเดิม:
+```dax
+// ห้ามเขียนแบบนี้ในระดับมืออาชีพ
+Margin % = [Profit] / [Sales Amount]
+```
+ถ้าวันใดวันหนึ่งมียอดขายเป็นศูนย์ หรือไม่มีข้อมูล (BLANK) ผลลัพธ์ที่ได้อาจกลายเป็นข้อผิดพลาด (Error) หรือแสดงคำว่า `Infinity` ซึ่งทำให้กราฟและหน้าปัดรายงานของผู้บริหารพังเสียหายทั้งหน้าจอ
+
+> **Best Practice:** ให้ใช้ฟังก์ชัน `DIVIDE ( Numerator, Denominator, [AlternateResult] )` เสมอ  
+> ฟังก์ชัน `DIVIDE` มีระบบความปลอดภัยในตัว (Safe Division) หากตัวหารเป็น 0 หรือเป็นค่าว่าง มันจะคืนค่าว่าง (**BLANK**) ออกมาให้อย่างนุ่มนวลโดยไม่ทำให้รายงาน Error
 
 ```dax
+// ถูกต้อง ปลอดภัย และได้มาตรฐานสากล
+Profit Margin = DIVIDE ( [Profit], [Sales Amount] )
+```
+
+---
+
+## ชุด Base Measures มาตรฐานของ Northwind DW
+
+ในฐานะ Data Analyst หรือ BI Developer เมื่อเริ่มสร้างโปรเจกต์ใหม่ เราควรสร้างชุดสูตรวัดพื้นฐาน (**Base Measures**) ประจำโมเดลเตรียมไว้เสมอ เพื่อนำไปต่อยอดในสูตรที่ซับซ้อนขึ้น:
+
+```dax
+// 1. ยอดขายรวม
 Sales Amount = SUM ( FactSales[SalesAmount] )
 
-Sales Quantity = SUM ( FactSales[Quantity] )
+// 2. ต้นทุนรวม
+Total Cost = SUM ( FactSales[LineCost] )
 
-Discount Amount = SUM ( FactSales[DiscountAmount] )
+// 3. กำไรขั้นต้น (นำ Measure ลบ Measure)
+Profit = [Sales Amount] - [Total Cost]
 
-Line Cost = SUM ( FactSales[LineCost] )
-
-Profit = SUM ( FactSales[Profit] )
-
+// 4. อัตราส่วนกำไรขั้นต้น (Safe Division)
 Profit Margin = DIVIDE ( [Profit], [Sales Amount] )
 
-Order Lines = COUNTROWS ( FactSales )
-
+// 5. จำนวนออเดอร์ที่ไม่ซ้ำกัน
 Orders = DISTINCTCOUNT ( FactSales[OrderID] )
 
-Customers = DISTINCTCOUNT ( FactSales[CustomerKey] )
+// 6. ปริมาณสินค้าที่ขายได้ทั้งหมด
+Quantity = SUM ( FactSales[Quantity] )
+
+// 7. มูลค่าเฉลี่ยต่อหนึ่งออเดอร์ (Average Order Value - AOV)
+Average Order Value = DIVIDE ( [Sales Amount], [Orders] )
 ```
 
-หลังมี measure แล้ว **ซ่อนคอลัมน์ฐาน** (`SalesAmount`, `Quantity`, `Profit`, …) จาก Report view — เหลือให้เลือกแค่ measure
-
-> **Best practice:** ใช้ `DIVIDE ( num, den )` แทน `/` เพื่อจัดการหารศูนย์ / BLANK  
-> อ้าง: [DIVIDE vs divide operator](https://learn.microsoft.com/dax/best-practices/dax-divide-function-operator)
-
-แคตตาล็อกเต็ม: [`dax/measures.dax`](../../dax/measures.dax)
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การต่อตัวต่อเลโก้ (Measure Reusability)**  
+> สังเกตสูตร `[Profit] = [Sales Amount] - [Total Cost]`  
+> เราไม่ได้เขียนว่า `SUM(SalesAmount) - SUM(LineCost)` ซ้ำอีกรอบ แต่เราหยิบ "ก้อนเลโก้" Measure เดิมที่เราเคยสร้างไว้มาประกอบเข้าด้วยกัน  
+> ประโยชน์คือ หากวันหน้าสูตรยอดขายมีการปรับเปลี่ยนเงื่อนไขทางธุรกิจ เราแก้ที่ `[Sales Amount]` จุดเดียว ทุกสูตรที่นำมันไปใช้จะได้รับผลการอัปเดตที่ถูกต้องทันที!
 
 ---
 
-## Format และ Home table
+## Lab 04 — สร้างชุด Base Measures ประจำโมเดล (โจทย์ + เฉลย)
 
-| Measure | Format แนะนำ |
-| --- | --- |
-| Sales Amount, Line Cost, Profit | Decimal number / Currency |
-| Profit Margin | Percentage 1–2 ตำแหน่ง |
-| Orders, Customers | Whole number |
+### โจทย์ปฏิบัติ
+1. สร้าง Measure ตามรายการด้านบนให้ครบถ้วนในตาราง `FactSales`:  
+   - `[Total Cost]`  
+   - `[Profit]`  
+   - `[Profit Margin]` (กำหนดรูปแบบการแสดงผลเป็น Percentage `0.0%`)  
+   - `[Quantity]`  
+   - `[Average Order Value]` (กำหนดรูปแบบเป็นสกุลเงิน Currency)
+2. สร้างตารางแบบ Matrix Visual:  
+   - นำ `DimProduct[Category]` มาวางที่ Rows  
+   - นำ `[Sales Amount]`, `[Total Cost]`, `[Profit]`, และ `[Profit Margin]` มาวางที่ Values
+3. นำ Slicer เลือกปี `DimDate[Year]` มาทดสอบคลิกเลือกปีต่างๆ
 
----
+### เฉลยสูตร
+ตรวจสอบสูตรและรูปแบบตัวเลขให้ตรงกับไฟล์ [`dax/measures.dax`](../../dax/measures.dax)
 
-## Lab 04 — Measures (โจทย์ + เฉลย)
-
-### โจทย์
-
-สร้างและจัด Display folder:
-
-- Sales: Sales Amount, Sales Quantity, Line Cost, Profit, Profit Margin
-- Volume: Order Lines, Orders, Customers
-
-ซ่อนคอลัมน์ฐานที่เกี่ยวข้อง
-
-### เฉลย
-
-คัดลอกบล็อกด้านบน (หรือจาก `dax/measures.dax` ตอน Sales / Volume)
-
-```dax
-Profit Margin = DIVIDE ( [Profit], [Sales Amount] )
-```
-
-อย่าเขียน `[Profit] / [Sales Amount]` เป็นค่าเริ่มต้นของคอร์ส
-
-### เกณฑ์ผ่าน
-
-- Profit Margin ใช้ `DIVIDE`
-- ลากคอลัมน์ `SalesAmount` ขึ้น visual ไม่ได้หรือไม่ถูกส่งเสริม (discourage เปิดอยู่)
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- เมื่อ `[Sales Amount]` และ `[Total Cost]` แสดงผลใน Matrix ยอด `[Profit]` ต้องเท่ากับผลต่างของสองช่องนั้นพอดีในทุกแถว
+- ในแถวรวมท้ายตาราง (Total Row) ช่อง `[Profit Margin]` ต้องคำนวณจาก $\frac{\text{Total Profit}}{\text{Total Sales}}$ อย่างถูกต้อง ไม่ใช่การนำเปอร์เซ็นต์ของแต่ละแถวมาบวกกันเฉยๆ
 
 ---
 
-**ถัดไป:** [05 — Aggregation และ Iterators](05-aggregation-and-iterators.md)
+**บทเรียนถัดไป:** [05 — Aggregation และ Iterators](05-aggregation-and-iterators.md)

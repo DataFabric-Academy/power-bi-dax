@@ -1,83 +1,78 @@
-# 15 — VertiPaq checklist และเครื่องมือตรวจ
+# 15 — VertiPaq checklist และการปรับแต่งประสิทธิภาพ
 
-**เป้าหมาย:** ทบทวนนิสัยโมเดลทั้งคอร์สเป็น checklist ที่ตรวจกับไฟล์ `.pbix` ของตัวเองได้  
-**ข้อกำหนด:** ทำ lab หลักบท 01–13 แล้ว
-
----
-
-## Checklist โมเดล (ติ๊กทีละข้อ)
-
-### Modeling
-
-- [ ] Star schema — Fact กลาง, Dim รอบ; ไม่มี snowflake ที่ไม่จำเป็น
-- [ ] Integer surrogate keys; ซ่อน `*Key` / FK จาก Report view
-- [ ] ปิด Auto date/time
-- [ ] Mark `DimDate[Date]` as Date Table; contiguous dates
-- [ ] Relationship single-direction เป็นค่าเริ่มต้น; role-playing date = inactive + `USERELATIONSHIP`
-- [ ] เงินเป็น Fixed Decimal; ยอด materialize → `SUM`
-- [ ] Explicit measures + **Discourage implicit measures**
-- [ ] ลบคอลัมน์ที่ไม่ใช้ (ลด cardinality / ขนาดโมเดล)
-
-### DAX authoring
-
-- [ ] คอลัมน์เป็น `Table[Column]`; measure เป็น `[Measure]`
-- [ ] `DIVIDE` แทน `/` เมื่อหาร
-- [ ] `CALCULATE` ใช้ Boolean filter; `KEEPFILTERS` เมื่อต้องการ intersection
-- [ ] เลี่ยง `FILTER ( ทั้งตาราง )` เมื่อไม่จำเป็น
-- [ ] `VAR` เมื่อใช้ผลซ้ำ
-- [ ] Calculated column เฉพาะ Slicer/กลุ่ม; ไม่พึ่ง `TODAY()` ใน production
-
-### Dynamics
-
-- [ ] Time patterns ซ้ำ → **Calculation groups** ไม่ใช่ YTD คนละตัวต่อ measure
-- [ ] สลับ field บน visual → **Field parameters**
-- [ ] What-if เป็น disconnected numeric parameter
+**เป้าหมาย:** เข้าใจสถาปัตยกรรมการจัดเก็บข้อมูลของเอนจิน **VertiPaq** ในหน่วยความจำ, ทำความเข้าใจกลไกการบีบอัดข้อมูลด้วย **Dictionary Encoding** และ **Run-Length Encoding (RLE)**, เข้าใจผลกระทบของ **Cardinality**, และใช้เช็คลิสต์ตรวจเช็คโมเดลก่อนนำขึ้นใช้งานจริงบน Production  
+**ข้อกำหนดเบื้องต้น:** ศึกษาเนื้อหาบทเรียนที่ 01 ถึง 14 หรือ 16 ครบถ้วนแล้ว
 
 ---
 
-## เครื่องมือ
+## เบื้องหลังความเร็วระดับเสี้ยววินาที: VertiPaq Engine ทำงานอย่างไร?
 
-| เครื่องมือ | ใช้ทำ |
-| --- | --- |
-| **Performance Analyzer** | จับเวลา visual / DAX query บนหน้ารายงาน |
-| **DAX query view** | ทดสอบ measure และ calc items แบบ `EVALUATE` |
-| ชีต `_QA` ใน Excel + `pytest` | ยืนยันคุณภาพไฟล์ข้อมูลต้นทาง |
+เคยสงสัยไหมครับว่า ทำไม Power BI ถึงสามารถสแกน ค้นหา และคำนวณข้อมูลหลายสิบล้านแถวบนแล็ปท็อปธรรมดาๆ ได้อย่างรวดเร็ว?  
+คำตอบอยู่ที่เอนจินฐานข้อมูลในแรมที่มีชื่อว่า **VertiPaq** ซึ่งใช้สถาปัตยกรรมแบบ **Columnar In-Memory Database**
 
-รันใน repo:
+### 1. การจัดเก็บข้อมูลแยกตามคอลัมน์ (Columnar Storage)
+ฐานข้อมูลแบบเดิม (เช่น SQL ทั่วไป) จะเก็บข้อมูลเรียงทีละแถว (Row-oriented) ทำให้เวลาต้องการหายอดรวมของคอลัมน์เดียว เครื่องต้องอ่านข้อมูลทั้งแถวขึ้นมาทั้งหมด  
+แต่ VertiPaq จะ **หั่นเก็บแยกทีละคอลัมน์** ทำให้เวลาสั่ง `SUM ( FactSales[SalesAmount] )` เครื่องจะพุ่งตรงไปอ่านเฉพาะช่องตัวเลขนั้นได้ทันทีโดยไม่ต้องแตะคอลัมน์อื่นเลย
+
+### 2. พจนานุกรมรหัสย่อ (Dictionary Encoding)
+ถ้าคอลัมน์ชื่อประเทศมีคำว่า `"Germany"` ซ้ำกัน 1,000,000 แถว...  
+VertiPaq จะไม่บันทึกคำว่า `"Germany"` หนึ่งล้านครั้งลงในแรม แต่จะสร้างตารางพจนานุกรมรหัสย่อ:
+- `1 = France`
+- `2 = Germany`
+- `3 = Italy`  
+แล้วในตารางข้อมูลจริง จะเก็บเพียงตัวเลขรหัส `2` ซึ่งเป็นตัวเลขขนาดจิ๋ว ช่วยลดขนาดข้อมูลลงได้นับสิบเท่า!
+
+### 3. การบีบอัดแถวที่ซ้ำซ้อน (Run-Length Encoding : RLE)
+ถ้ามีรหัส `2` เรียงติดกัน 100,000 แถว ระบบจะไม่บันทึกเลข `2` หนึ่งแสนตัว แต่จะบันทึกข้อความสั้นๆ ว่า: **"มีเลข 2 ซ้ำกันตั้งแต่แถวที่ 1 ถึงแถวที่ 100,000"** ข้อมูลขนาดใหญ่จึงถูกย่อเหลือเพียงไม่กี่ไบต์!
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): ตู้เสื้อผ้าที่คัดแยกสีเรียบร้อย**  
+> เปรียบเหมือนการจัดตู้เสื้อผ้า ถ้าคุณโยนเสื้อผ้าทุกชนิดคละกันลงในตะกร้า (Row store) เวลาจะหาถุงเท้าสีดำคู่เดียวคุณต้องรื้อผ้าทั้งตะกร้า  
+> แต่ถ้าคุณแยกตู้: ตู้ถุงเท้า, ตู้เสื้อยืด, ตู้กางเกง (Columnar store) และพับเรียงตามสี (RLE Compression) คุณจะสามารถหยิบถุงเท้าที่ต้องการได้ทันทีภายใน 1 วินาที!
+
+---
+
+## ศัตรูตัวร้ายอันดับหนึ่งของประสิทธิภาพ: Cardinality
+
+คำว่า **Cardinality** หมายถึง **"จำนวนค่าที่ไม่ซ้ำกัน (Distinct Values) ในคอลัมน์นั้นๆ"**
+- **Low Cardinality (ดีเยี่ยม):** เช่น เพศ (มี 2 ค่า), สถานะสินค้า (มี 2 ค่า), วันในสัปดาห์ (มี 7 ค่า) → บีบอัดได้มหาศาล แรมใช้น้อย โมเดลเร็วมาก
+- **High Cardinality (อันตราย):** เช่น รหัสธุรกรรมที่ไม่ซ้ำกันเลย (Transaction ID), หรือคอลัมน์วันที่ที่ติดเวลาเป็นระดับวินาที (`2024-05-12 14:23:59`) ซึ่งมีค่าแทบไม่ซ้ำกันเลย ทำให้ VertiPaq ไม่สามารถบีบอัดได้ ต้องสร้างพจนานุกรมขนาดยักษ์ ส่งผลให้ไฟล์ `.pbix` มีขนาดบวมโตและรายงานโหลดช้าลงอย่างเห็นได้ชัด
+
+---
+
+## Production Readiness Checklist (เช็คลิสต์ตรวจความพร้อมของโมเดล)
+
+ก่อนที่คุณจะส่งมอบงานหรือ Publish โมเดลขึ้น Power BI Service ให้ตรวจเช็คตามรายการนี้เสมอ:
+
+- [ ] **1. Star Schema:** โครงสร้างหลักต้องเป็น Fact ล้อมรอบด้วย Dim ไม่เป็น Snowflake หลายชั้น
+- [ ] **2. Auto date/time ปิดสนิท:** ตรวจสอบว่าได้ปิด Auto date/time แล้ว และมีตาราง `DimDate` ที่ Mark as Date Table เรียบร้อย
+- [ ] **3. ซ่อนคอลัมน์รหัส:** คอลัมน์ `*Key` หรือ Foreign Keys ทั้งหมดต้องถูก Hide ไว้ ไม่ปล่อยให้ผู้ใช้เห็น
+- [ ] **4. เปิด Discourage Implicit Measures:** บังคับให้รายงานใช้เฉพาะ Explicit Measure เท่านั้น
+- [ ] **5. กำจัดคอลัมน์ High Cardinality ที่ไม่จำเป็น:** ลบคอลัมน์วันที่ที่มีเวลาติดมา หรือแยกชั่วโมง/นาทีออกจากวันที่
+- [ ] **6. ใช้ `DIVIDE()` เสมอ:** ตรวจสอบว่าไม่มีสูตรไหนที่ใช้เครื่องหมาย `/` สดๆ เพื่อป้องกัน Error
+- [ ] **7. ใช้ Calculation Groups สำหรับ Time Intelligence:** เพื่อลดจำนวน Measure ในโมเดลและทำให้รายงานเป็นระเบียบ
+
+---
+
+## เครื่องมือประจำตัวของ BI Developer ระดับมืออาชีพ
+
+1. **DAX Query View:** หน้าต่างใหม่ใน Power BI Desktop สำหรับทดสอบเขียนคำสั่ง DAX Query (`EVALUATE`) โดยตรง สะดวกรวดเร็วโดยไม่ต้องสร้าง Visual ชั่วคราว
+2. **Performance Analyzer:** เมนูในหน้า View เพื่อจับเวลาดูว่า Visual แต่ละชิ้นใช้เวลาประมวลผลกี่มิลลิวินาที (แยกเป็นเวลาของ DAX Query, Visual Display, และเวลาอื่นๆ)
+3. **DAX Studio & Tabular Editor:** เครื่องมือภายนอกระดับสากลสำหรับส่องดูขนาดคอลัมน์ในแรม (VertiPaq Analyzer) และบริหารจัดการโมเดลอย่างมืออาชีพ
+
+---
+
+## Lab 15 — ตรวจสอบคุณภาพโมเดลผ่านการทดสอบอัตโนมัติ (โจทย์ + เฉลย)
+
+ในโปรเจกต์นี้ เรามีชุดทดสอบอัตโนมัติด้วย `pytest` เพื่อตรวจเช็คความสอดคล้องของโมเดล Northwind DW และแคตตาล็อกสูตรใน `dax/measures.dax`:
 
 ```bash
-pip install -r requirements.txt
+# รันคำสั่งทดสอบใน Terminal
 pytest -q
 ```
 
-คาดหวัง: tests ผ่านครบ (ปัจจุบัน 21 passed)
-
-> อ้าง: [Import data reduction](https://learn.microsoft.com/power-bi/guidance/import-modeling-data-reduction) · [Star schema](https://learn.microsoft.com/power-bi/guidance/star-schema) · [Best practices index](../best-practices/README.md)
-
----
-
-## Lab 15 — Checklist (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. เปิด `.pbix` ของคุณ ติ๊ก checklist ด้านบนทุกข้อที่เกี่ยวข้อง
-2. รัน `pytest -q` ใน repo เพื่อยืนยัน Excel
-3. (แนะนำ) Performance Analyzer บน Matrix ที่มี calc group — บันทึกว่า query กลับมา
-
-### เฉลย
-
-ผ่านเมื่อ:
-
-- Checklist โมเดล/DAX/Dynamics ติ๊กครบตามที่สร้างจริง
-- `pytest -q` ผ่าน
-- มี calc group Time Intelligence ใช้งานกับอย่างน้อย `[Sales Amount]` และ `[Sales Quantity]`
-
-### เกณฑ์ผ่าน
-
-- ไม่มี lab ที่บังคับ snowflake หรือ hash key บน fact
-- Discourage implicit measures เปิดอยู่
-- จบคอร์สโดยไม่ต้องพึ่งสูตรจากสไลด์
+### ผลลัพธ์ที่ต้องการ
+- การทดสอบทั้ง 24 รายการต้องผ่านสมบูรณ์ (`24 passed`) ยืนยันว่าโมเดล Star Schema และชุดสูตร DAX ทั้งหมดตรงตามข้อกำหนดและพร้อมใช้งานจริงระดับ Production!
 
 ---
 
-**จบชุดบทเรียน** — ดัชนี: [README](README.md) · BP: [../best-practices/README.md](../best-practices/README.md)
+**ยินดีด้วย! คุณได้สำเร็จหลักสูตร Power BI DAX & Semantic Model ครบถ้วนทุกบทเรียนอย่างสมบูรณ์**

@@ -450,6 +450,54 @@ def rewrite_measures(ws) -> None:
             "Role Playing",
             "CALCULATE ( [Sales Quantity], USERELATIONSHIP ( FactSales[RequiredDateKey], DimDate[DateKey] ) )",
         ],
+        [
+            "FactSales",
+            "Max Active List Price",
+            "Product",
+            'MAXX ( FILTER ( DimProduct, DimProduct[Status] = "Active" ), DimProduct[ListPrice] )',
+        ],
+        [
+            "DimCustomer",
+            "#Customer",
+            "Volume",
+            "COUNTROWS ( DimCustomer )",
+        ],
+        [
+            "DimProduct",
+            "#Product",
+            "Volume",
+            "COUNTROWS ( DimProduct )",
+        ],
+        [
+            "DimCustomer",
+            "#Country",
+            "Volume",
+            "DISTINCTCOUNTNOBLANK ( DimCustomer[Country] )",
+        ],
+        [
+            "FactSales",
+            "Sales Amount EU Share",
+            "Sales",
+            "VAR EuSales = [Sales Amount EU] VAR AllSales = CALCULATE ( [Sales Amount], REMOVEFILTERS ( DimCustomer[Country] ) ) RETURN DIVIDE ( EuSales, AllSales )",
+        ],
+        [
+            "FactSales",
+            "Sales Amount % of Visual",
+            "Sales",
+            "VAR Numerator = [Sales Amount] VAR Denominator = CALCULATE ( [Sales Amount], ALLSELECTED ( DimProduct[Category] ) ) RETURN DIVIDE ( Numerator, Denominator )",
+        ],
+        [
+            "FactSales",
+            "Sales Quantity YoY %",
+            "Time Intelligence",
+            "DIVIDE ( [Sales Quantity] - [Sales Quantity PY], [Sales Quantity PY] )",
+        ],
+        [
+            "FactSales",
+            "Sales Amount Rolling 60d",
+            "Time Intelligence",
+            "CALCULATE ( [Sales Amount], DATESINPERIOD ( DimDate[Date], MAX ( DimDate[Date] ), -60, DAY ) )",
+        ],
     ]
     ws.delete_rows(1, ws.max_row)
     for row in rows:

@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - "data/**"
+      - "dax/**"
       - "tests/**"
       - "scripts/**"
   pull_request:
     paths:
       - "data/**"
+      - "dax/**"
       - "tests/**"
       - "scripts/**"
 

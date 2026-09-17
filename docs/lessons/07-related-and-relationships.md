@@ -1,77 +1,73 @@
 # 07 — RELATED และ Relationships
 
-**เป้าหมาย:** ดึงค่าจาก Dimension ไป Fact ด้วย `RELATED`; เข้าใจ single-direction, active vs inactive  
-**ข้อกำหนด:** Relationships จากบท 01 ครบ
+**เป้าหมาย:** ใช้งานฟังก์ชัน `RELATED` และ `RELATEDTABLE` เพื่อดึงข้อมูลข้ามตารางได้อย่างถูกต้องตามทิศทางความสัมพันธ์, เข้าใจความแตกต่างระหว่าง Active และ Inactive Relationships, และรู้วิธีรับมือกับสถานการณ์ Role-Playing Dimensions  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 06 เรียบร้อยแล้ว
 
 ---
 
-## RELATED ทำงานเมื่อไหร่
+## การเดินทางข้ามตาราง: `RELATED` vs `RELATEDTABLE`
 
-`RELATED ( DimTable[Column] )` ใช้ใน **row context ฝั่ง many** (เช่น calculated column บน Fact) เพื่อเดินไปตาราง one ตาม relationship ที่ **active**
+เมื่อเรากำลังทำงานอยู่ในแถวใดแถวหนึ่ง (Row Context) แล้วต้องการหยิบข้อมูลจากอีกตารางหนึ่งมาใช้ เราไม่สามารถพิมพ์ชื่อคอลัมน์ของตารางอื่นตรงๆ ได้ แต่ต้องใช้สะพานเชื่อมโยงตามทิศทางความสัมพันธ์:
 
-```dax
-// บน FactSales (calculated column — demo / slicer บน fact ถ้าจำเป็น)
-Customer Name = RELATED ( DimCustomer[Customer] )
-
-Product Category = RELATED ( DimProduct[Category] )
-
-Supplier Name = RELATED ( DimProduct[Supplier] )
+```
+[ตารางข้อมูลอ้างอิง Dim] (ฝั่ง One: เลข 1)
+         ▲
+         │   RELATED (เดินขึ้นไปหาฝั่ง One ได้ค่าเดี่ยวเสมอ)
+         │   ─────────────────────────────────────────────
+         │   RELATEDTABLE (เดินลงมาหาฝั่ง Many ได้ตารางหลายแถว)
+         ▼
+  [ตารางรายการ Fact] (ฝั่ง Many: เครื่องหมายดอกจัน *)
 ```
 
-**ไม่มีตาราง SUPPLIERS แยก** — Supplier ถูก denormalize เข้า `DimProduct` แล้ว
+### 1. ฟังก์ชัน `RELATED` (เดินจากฝั่ง Many ไปหาฝั่ง One)
+ใช้เมื่อเราอยู่ที่ตารางฝั่ง Many (เช่น `FactSales`) แล้วต้องการขอดูข้อมูลจากฝั่ง One (เช่น `DimProduct`)
 
-ทิศกลับ (Dim → รวม Fact) ใช้ `RELATEDTABLE` หรือ measure บน Fact ไม่ใช่ `RELATED`
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การเปิดสมุดทะเบียนประวัติ**  
+> นึกภาพว่าคุณกำลังถือ **ใบเสร็จขายสินค้า (Fact)** อยู่ในมือ ในใบเสร็จมีรหัสสินค้า `ProductKey = 14`  
+> คุณอยากรู้ว่า "สินค้าชิ้นนี้มีต้นทุนมาตรฐานเท่าไหร่?"  
+> คุณจึงเงยหน้าขึ้นแล้วเดินไป **เปิดสมุดแคตตาล็อกสินค้า (Dimension)** เพื่อเปิดดูหน้าที่ 14  
+> เนื่องจากสินค้า 1 รหัส มีคุณลักษณะได้เพียงแบบเดียวเสมอ (**Many-to-One**) คุณจึงได้คำตอบกลับมาเป็น **ค่าเดี่ยวๆ (Single Value)** อย่างแน่นอนเสมอ จึงใช้คำสั่ง `RELATED ( DimProduct[StandardCost] )` ได้ทันที
 
-> **Best practice:** ลด hop — denormalize snowflake เข้า dimension เดียวเมื่อเป็นไปได้  
-> อ้าง: [Star schema — snowflake](https://learn.microsoft.com/power-bi/guidance/star-schema#snowflake-dimensions)
+### 2. ฟังก์ชัน `RELATEDTABLE` (เดินจากฝั่ง One ไปหาฝั่ง Many)
+ใช้เมื่อเราอยู่ที่ตารางฝั่ง One (เช่น `DimCustomer`) แล้วต้องการดูว่ามีรายการในฝั่ง Many เกี่ยวข้องกับแถวนี้กี่รายการ
 
----
-
-## ทิศทาง Filter
-
-ค่าเริ่มต้นคอร์ส: **Single** (Dimension กรอง Fact)
-
-Bi-directional ใช้เมื่อมีเหตุผลชัด (เช่น many-to-many bridge) — ไม่เปิดทั้งโมเดลเพื่อ “ให้ slicer โผล่”
-
-> **Best practice:** [Relationships active vs inactive](https://learn.microsoft.com/power-bi/guidance/relationships-active-inactive)
-
----
-
-## Role-playing Date (สามเส้นไป DimDate)
-
-| FK บน Fact | Active | ความหมายธุรกิจ |
-| --- | --- | --- |
-| `OrderDateKey` | Yes | วิเคราะห์ยอดตามวันสั่ง |
-| `RequiredDateKey` | No | วันครบกำหนด |
-| `ShippedDateKey` | No | วันส่งของ |
-
-เปิดเส้น inactive ด้วย `USERELATIONSHIP` ใน measure (บท 09)  
-ทางเลือกตาม Learn: ทำตารางวันที่ซ้ำ `DimShipDate` — คอร์สนี้ใช้ inactive + measure เพื่อไม่เพิ่มตาราง
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): การค้นประวัติการซื้อของลูกค้า**  
+> ผู้จัดการกำลังเปิดดูหน้าของ "ลูกค้าบริษัท ก" ในสมุดทะเบียนลูกค้า แล้วถามว่า "ลูกค้าคนนี้เคยซื้อของกับเราไปกี่ครั้ง?"  
+> เนื่องจากลูกค้า 1 คน สามารถซื้อของได้หลายครั้ง (**One-to-Many**) คำตอบที่ได้กลับมาจึงไม่ใช่ตัวเลขตัวเดียว แต่ได้กลับมาเป็น **"ตารางทั้งก้อน" (Table of rows)** ที่รวบรวมใบเสร็จทั้งหมดของลูกค้ารายนี้เอาไว้ เราจึงต้องนำไปครอบด้วยฟังก์ชันนับ เช่น `COUNTROWS ( RELATEDTABLE ( FactSales ) )`
 
 ---
 
-## Lab 07 — RELATED (โจทย์ + เฉลย)
+## เส้นเชื่อมโยงแบบ Active vs. Inactive (สะพานหลัก vs. สะพานสำรอง)
 
-### โจทย์
+ในชีวิตจริงของการวิเคราะห์ข้อมูล ธุรกิจมักมีมิติเวลาที่เกี่ยวข้องกับธุรกรรมมากกว่า 1 วันที่ (เรียกว่า **Role-Playing Dimensions**) เช่น ในตาราง `FactSales`:
+1. `OrderDateKey` = วันที่ลูกค้ากดสั่งซื้อ
+2. `RequiredDateKey` = วันที่ลูกค้าต้องการให้ส่งถึงมือ
+3. `ShippedDateKey` = วันที่บริษัทจัดส่งสินค้าออกจากคลังจริง
 
-1. Calculated columns บน FactSales: `Customer Name`, `Product Category`, `Supplier Name`
-2. Table visual: OrderID + สามคอลัมน์ + `[Sales Amount]`
-3. **ห้าม** สร้างตาราง SUPPLIERS
+**กฎเหล็กของ Power BI:**  
+ระหว่างตารางสองตารางเดียวกัน สามารถมีเส้นเชื่อมโยงที่เปิดใช้งาน (**Active Relationship**) ได้เพียง **1 เส้นเท่านั้น** (แสดงด้วยเส้นทึบ) ส่วนเส้นอื่นๆ จะต้องเป็นเส้นสำรองที่ปิดอยู่ (**Inactive Relationship** แสดงด้วยเส้นประ) ทั้งนี้เพื่อป้องกันไม่ให้เกิดความกำกวมในการไหลของฟิลเตอร์
 
-### เฉลย
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): สะพานข้ามแม่น้ำแบบพับเก็บได้**  
+> - **Active Relationship (เส้นทึบ):** คือ **"สะพานหลักข้ามแม่น้ำ"** ที่เปิดให้รถสัญจรตามปกติ ตัวกรองจาก `DimDate` จะวิ่งข้ามสะพานนี้ไปยัง `OrderDateKey` เสมอ  
+> - **Inactive Relationship (เส้นประ):** คือ **"สะพานพับฉุกเฉิน"** ที่ปกติจะยกค้างไว้ ไม่เปิดให้รถทั่วไปวิ่งผ่าน  
+> - เมื่อไหร่ก็ตามที่ผู้บริหารต้องการดู "ยอดขายตามวันที่ส่งของจริง (Shipped Date)" BI Developer จะกดปุ่มสั่งการพิเศษผ่านคำสั่ง `USERELATIONSHIP` ในฟังก์ชัน `CALCULATE` เพื่อลดสะพานพับนี้ลงมาใช้งานเฉพาะกิจในสูตรนั้น! (จะได้ลงมือทำในบทที่ 09)
 
+---
+
+## Lab 07 — ทดลองดึงข้อมูลข้ามตารางและนับแถว (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. ในตาราง `DimCustomer` สร้าง Calculated Column ชื่อ `LifetimeOrderLines` เพื่อนับจำนวนรายการสินค้าที่ลูกค้ารายนั้นเคยซื้อ โดยใช้ `COUNTROWS` ร่วมกับ `RELATEDTABLE`
+2. ตรวจสอบหน้า Model view เพื่อยืนยันว่าเส้นเชื่อมระหว่าง `FactSales` ไปยัง `DimDate` มีเส้นทึบ 1 เส้น (`OrderDateKey`) และเส้นประ 2 เส้น (`RequiredDateKey`, `ShippedDateKey`)
+
+### เฉลยสูตร
 ```dax
-Customer Name = RELATED ( DimCustomer[Customer] )
-Product Category = RELATED ( DimProduct[Category] )
-Supplier Name = RELATED ( DimProduct[Supplier] )
+LifetimeOrderLines = COUNTROWS ( RELATEDTABLE ( FactSales ) )
 ```
 
-ถ้า `RELATED` error: ตรวจ relationship Fact→Dim นั้น active และ cardinality many-to-one
-
-### เกณฑ์ผ่าน
-
-- Table แสดงชื่อลูกค้า/หมวด/ซัพพลายเออร์โดยไม่ต้องมีตารางซัพพลายเออร์แยก
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- คอลัมน์ `LifetimeOrderLines` บน `DimCustomer` แสดงตัวเลขจำนวนแถวของลูกค้าแต่ละรายได้ถูกต้อง (ลูกค้าที่ซื้อบ่อยจะมีตัวเลขสูง ลูกค้าที่ไม่เคยซื้อจะมีค่าเป็น BLANK)
 
 ---
 
-**ถัดไป:** [08 — Date Table](08-date-table.md)
+**บทเรียนถัดไป:** [08 — Date Table](08-date-table.md)

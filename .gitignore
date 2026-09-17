@@ -26,8 +26,15 @@ venv/
 # Optional pristine backup (local only)
 data/_pristine_*.xlsx
 
-# Cursor — keep project MCP + rules in git; ignore other local Cursor state
+# Cursor — keep project MCP, rules, and skills in git; ignore other local Cursor state.
+# `!.cursor/` first so a global excludesFile that ignores `.cursor/` does not
+# block the un-ignores below.
+!.cursor/
 .cursor/*
 !.cursor/mcp.json
 !.cursor/rules/
 !.cursor/rules/**
+!.cursor/skills/
+!.cursor/skills/**
+!.cursor/common/
+!.cursor/common/**

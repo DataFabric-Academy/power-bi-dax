@@ -1,78 +1,76 @@
-# 13 — What-if parameters
+# 13 — What-if Parameters
 
-**เป้าหมาย:** สร้างพารามิเตอร์ตัวเลข (เช่นส่วนลดสมมติ) แล้วผูกกับ measure เพื่อจำลองสถานการณ์  
-**ข้อกำหนด:** มี `[Sales Amount]`
-
-อ้างอิง: [Use what-if parameters](https://learn.microsoft.com/power-bi/transform-model/desktop-what-if)
+**เป้าหมาย:** สร้างแบบจำลองสถานการณ์ทางธุรกิจ (Scenario Analysis / Sensitivity Testing) ด้วย **What-if Parameters**, เข้าใจบทบาทของตารางลอยแบบตัดขาดความสัมพันธ์ (**Disconnected Table**), และนำค่าพารามิเตอร์ไปจำลองผลกระทบต่อยอดขายและกำไรของบริษัท  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 12 เรียบร้อยแล้ว
 
 ---
 
-## สร้าง Numeric range parameter
+## การวิเคราะห์สถานการณ์จำลอง (What-if Analysis) คืออะไร?
 
-1. **Modeling → New parameter → Numeric range**
-2. ชื่อ: `Discount Scenario`
-3. Data type: Decimal number
-4. Min 0 · Max 0.30 · Increment 0.01  
-   (หรือ 0–30 แล้วหาร 100 ใน measure — เลือกอย่างใดอย่างหนึ่งให้สม่ำเสมอ)
-5. Default 0 · Add slicer to page
+ในงานของ Business Analyst และ Data Analyst งานที่สร้างมูลค่าสูงสุดให้กับฝ่ายบริหารคือการตอบคำถามประเภท:
+- *"ถ้าปีหน้าเราขึ้นราคาสินค้า 5% ยอดขายและกำไรของเราจะเปลี่ยนไปเป็นเท่าไหร่?"*
+- *"ถ้าต้นทุนการผลิตเพิ่มขึ้น 10% เราจะยังเหลือกำไรอยู่กี่บาท?"*
 
-Power BI สร้างตารางพารามิเตอร์ + measure ค่าที่เลือก (ชื่อประมาณ `Discount Scenario Value`)
+คำถามเหล่านี้ไม่สามารถตอบได้ด้วยข้อมูลยอดขายในอดีตเพียงอย่างเดียว แต่ต้องการ **"ตัวแปรจำลอง"** ที่ผู้บริหารสามารถปรับหมุนตัวเลขขึ้นลงเพื่อดูผลลัพธ์ได้แบบ Real-time
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): ลูกบิดปรับระดับเสียง**  
+> What-if Parameter เปรียบเสมือน **"ลูกบิดหมุนปรับเสียงบนแอมพลิฟายเออร์"**  
+> คุณสามารถเลื่อนสไลเดอร์เพื่อหมุนปรับตัวเลขจำลอง เช่น ปรับส่วนลด 0%, 5%, 10%, 15% แล้วระบบจะคำนวณผลกระทบทางธุรกิจออกมาให้เห็นทันที
 
 ---
 
-## Measure สถานการณ์
+## Disconnected Table: ตารางลอยที่ต้องไม่มีเส้นเชื่อมโยง
 
-ถ้าพารามิเตอร์เป็นสัดส่วน 0–0.30:
+เบื้องหลังของ What-if Parameter คือการสร้างตารางจำลองตัวเลขขึ้นมา 1 ตาราง ด้วยฟังก์ชัน `GENERATESERIES`:
 
 ```dax
-Sales after Scenario Discount =
-[Sales Amount] * ( 1 - 'Discount Scenario'[Discount Scenario Value] )
+Price Adjustment = GENERATESERIES ( -0.20, 0.20, 0.05 )
 ```
+สูตรนี้จะสร้างรายการตัวเลขตั้งแต่ -20% ถึง +20% โดยขยับทีละ 5%
 
-ถ้าพารามิเตอร์เป็นเปอร์เซ็นต์ 0–30:
+> ⚠️ **กฎเหล็กทางสถาปัตยกรรม (Architecture Rule):**  
+> ตาราง What-if Parameter จะต้องเป็น **Disconnected Table (ตารางอิสระที่ห้ามลากเส้นเชื่อมโยง Relationship กับตารางใดๆ ในโมเดลเด็ดขาด)**  
+> เพราะถ้าเราเผลอไปเชื่อมความสัมพันธ์ ตัวเลขจำลองจะวิ่งไปกรองข้อมูลจริงในอดีตจนเสียหาย การปล่อยให้มันลอยอยู่อย่างอิสระ จะทำให้เราสามารถนำค่าที่ผู้ใช้เลือกไปคำนวณจำลองสถานการณ์ได้อย่างปลอดภัย 100%
+
+---
+
+## การดึงค่าพารามิเตอร์มาใช้ใน Measure ด้วย `SELECTEDVALUE()`
+
+เมื่อผู้ใช้เลื่อนสไลเดอร์บนหน้าจอ เราจะอ่านค่าที่ผู้ใช้เลือกด้วยคำสั่ง `SELECTEDVALUE`:
 
 ```dax
-Sales after Scenario Discount =
-[Sales Amount] * ( 1 - DIVIDE ( 'Discount Scenario'[Discount Scenario Value], 100 ) )
+// 1. อ่านค่าที่ผู้บริหารกำลังเลือกบน Slider (ถ้าไม่เลือกให้ถือเป็น 0)
+Price Adjustment Value = SELECTEDVALUE ( 'Price Adjustment'[Price Adjustment], 0 )
+
+// 2. นำไปจำลองยอดขายใหม่
+Sales Amount (What-if) = 
+[Sales Amount] * ( 1 + [Price Adjustment Value] )
+
+// 3. นำไปจำลองกำไรใหม่ (สมมติให้ต้นทุนจริงคงที่)
+Profit (What-if) = 
+[Sales Amount (What-if)] - [Total Cost]
 ```
 
-จัด format เป็นเงินเช่นเดียวกับ Sales Amount
+---
+
+## Lab 13 — สร้างระบบจำลองการปรับราคาสินค้า (โจทย์ + เฉลย)
+
+### โจทย์ปฏิบัติ
+1. ไปที่เมนู **Modeling → New parameter → Numeric range**
+2. ตั้งค่าพารามิเตอร์:
+   - ชื่อ: `Price Adjustment`
+   - Data type: `Decimal number`
+   - Minimum: `-0.20`
+   - Maximum: `0.20`
+   - Increment: `0.05`
+   - Default: `0.00`
+3. ตรวจสอบว่ามี Slicer แบบ Slider ปรากฏขึ้นบนหน้ารายงาน
+4. สร้าง Measure `[Sales Amount (What-if)]` และ `[Profit (What-if)]` ตามสูตรด้านบน
+5. นำ Card Visual แสดง `[Sales Amount]` เทียบกับ `[Sales Amount (What-if)]` และทดสอบเลื่อนสไลเดอร์ไปที่ `+10%`
+
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- เมื่อเลื่อนสไลเดอร์ไปที่ `+10%` (0.10) ตัวเลขบน Card `[Sales Amount (What-if)]` จะต้องมีค่าเพิ่มขึ้นจากยอดขายเดิม 10% อย่างถูกต้อง
 
 ---
 
-## รายงานแนะนำ
-
-- Slicer ของพารามิเตอร์
-- Clustered column / Line: `[Sales Amount]` vs `[Sales after Scenario Discount]` ตามเดือน
-- Card แสดงส่วนต่าง:
-
-```dax
-Scenario Impact =
-[Sales after Scenario Discount] - [Sales Amount]
-```
-
-> **Best practice:** What-if เป็นตาราง disconnected — ไม่สร้าง relationship ไป Fact  
-> อ้าง: [What-if parameters](https://learn.microsoft.com/power-bi/transform-model/desktop-what-if)
-
----
-
-## Lab 13 — What-if (โจทย์ + เฉลย)
-
-### โจทย์
-
-1. Parameter ส่วนลด 0–30% (หรือ 0–0.30)
-2. Measure Sales after Scenario Discount
-3. Column chart เทียบกับ Sales Amount — เลื่อน slicer แล้วยอดเปลี่ยน
-
-### เฉลย
-
-ใช้ขั้นตอนและสูตรด้านบน ปรับชื่อตาราง/measure ให้ตรงกับที่ Parameter wizard สร้าง  
-ถ้าเลื่อนแล้วไม่เปลี่ยน: ตรวจว่า visual ใช้ measure สถานการณ์ ไม่ใช่คอลัมน์ดิบ และไม่ได้ hardcode ตัวเลขในสูตร
-
-### เกณฑ์ผ่าน
-
-- เลื่อน slicer แล้วยอด scenario เปลี่ยนตาม
-
----
-
-**ถัดไป:** [14 — Visual Calculations](14-visual-calculations.md) (ภาคผนวก) หรือข้ามไป [15](15-vertipaq-and-performance.md)
+**บทเรียนถัดไป:** [14 — Visual Calculations](14-visual-calculations.md)

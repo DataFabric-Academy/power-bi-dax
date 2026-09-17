@@ -1,96 +1,97 @@
 # 06 — Logical, Text, Date
 
-**เป้าหมาย:** ใช้ IF / SWITCH, การต่อข้อความ, และคอลัมน์วันที่บน dimension อย่างถูกชนิดข้อมูล  
-**ข้อกำหนด:** มี `DimProduct[ProductCode]`, `UnitsInStock`, `ReorderLevel`, `Status`
+**เป้าหมาย:** ใช้ฟังก์ชันตรรกะแบบหลายเงื่อนไขด้วย `SWITCH ( TRUE () )` เพื่อทดแทน Nested IF ที่ซับซ้อน, ใช้งานฟังก์ชันข้อความและการจัดรูปแบบด้วย `FORMAT`, และเข้าใจการทำงานกับค่าว่าง (`BLANK`) ใน DAX  
+**ข้อกำหนดเบื้องต้น:** จบบทเรียนที่ 05 เรียบร้อยแล้ว
 
 ---
 
-## Logical — IF / SWITCH / IN
+## เลิกใช้ Nested IF แล้วเปลี่ยนมาใช้ `SWITCH ( TRUE () )`
+
+เมื่อเราต้องเขียนเงื่อนไขทางธุรกิจที่มีการตัดเกรดหรือแบ่งช่วงตัวเลขหลายระดับ เช่น การแบ่งกลุ่มราคาสินค้า:
+- ถ้าน้อยกว่า 20 ให้เป็น "Budget"
+- ถ้าน้อยกว่า 50 ให้เป็น "Standard"
+- ถ้ามากกว่านั้นให้เป็น "Premium"
+
+หากเขียนด้วยฟังก์ชัน `IF` ซ้อนกันหลายชั้น (Nested IF):
+```dax
+// อ่านยาก แก้ไขยาก วงเล็บซ้อนกันจนตาลาย
+PriceTier = IF ( DimProduct[ListPrice] < 20, "Budget", IF ( DimProduct[ListPrice] < 50, "Standard", "Premium" ) )
+```
+
+> 💡 **คิดภาพตามง่ายๆ (Mental Model): บันไดตรวจสอบความจริงทีละขั้น**  
+> รูปแบบ `SWITCH ( TRUE (), ... )` เปรียบเสมือนการเดินลงบันไดตรวจสอบเงื่อนไขทีละขั้นอย่างเป็นระเบียบ  
+> คำว่า `TRUE()` ที่ใส่ไว้ตัวแรก บอกระบบว่า **"ให้เริ่มเดินเช็คเงื่อนไขตั้งแต่บรรทัดแรก บรรทัดไหนที่ให้ผลลัพธ์เป็นจริง (TRUE) เป็นข้อแรก ให้หยิบคำตอบนั้นไปใช้ทันที แล้วหยุดเดินทันที!"**
 
 ```dax
-PromotionFlag =
-IF (
-    INT ( LEFT ( DimProduct[ProductCode], 1 ) ) IN { 1, 8 },
-    0.2,
-    0
+// อ่านง่าย สบายตา จัดระเบียบง่าย และเป็นมาตรฐานระดับมืออาชีพ
+PriceTier = 
+SWITCH ( 
+    TRUE (), 
+    DimProduct[ListPrice] < 20, "Budget", 
+    DimProduct[ListPrice] < 50, "Standard", 
+    "Premium" 
 )
 ```
 
+---
+
+## การจัดการกับข้อความและวันที่ด้วย `FORMAT()`
+
+ฟังก์ชัน `FORMAT` ใช้สำหรับแปลงค่าตัวเลขหรือวันที่ให้ออกมาเป็นข้อความตามรูปแบบที่เราต้องการ:
 ```dax
-Reorder =
-IF (
-    DimProduct[UnitsInStock] <= DimProduct[ReorderLevel]
-        && DimProduct[Status] = "Active",
-    "Reorder",
-    "OK"
-)
+// แปลงวันที่ให้อยู่ในรูป ปี-เดือน เช่น "1997-05"
+YearMonth = FORMAT ( DimDate[Date], "YYYY-MM" )
 ```
 
-ใช้ `&&` / `||` ใน expression; ใน `CALCULATE` filter argument ใช้เครื่องหมายจุลภาคแยกเงื่อนไข (บท 09)
+> ⚠️ **ข้อควรระวังสำคัญสำหรับ BI Developer:**  
+> ผลลัพธ์ที่ได้จากฟังก์ชัน `FORMAT()` จะกลายเป็น **ข้อความ (Text)** เสมอ!  
+> ถ้าคุณนำคอลัมน์ที่ได้จาก `FORMAT(Date, "YYYY-MM")` ไปใส่ในกราฟ คอมพิวเตอร์จะมองเป็นข้อความธรรมดา ทำให้ไม่สามารถใช้คุณสมบัติของระบบวิเคราะห์วันเวลา (Time Intelligence) ได้อย่างสมบูรณ์ และการเรียงลำดับอาจผิดเพี้ยนหากไม่ตั้งค่า Sort by Column ควบคู่ไปด้วย
 
 ---
 
-## Text
+## ทำความเข้าใจค่า `BLANK()` ใน DAX
 
-```dax
-Employee Full =
-DimEmployee[FirstName] & " " & DimEmployee[LastName]
-```
+ในภาษา DAX ค่าว่างหรือ **`BLANK()`** มีพฤติกรรมพิเศษที่แตกต่างจากภาษาอื่น:
+- `BLANK()` ไม่ใช่เลขศูนย์ `0`
+- `BLANK()` ไม่ใช่ข้อความว่าง `""`
+- แต่มันเปรียบเหมือน **"กล่องเปล่าที่ยังไม่ได้ใส่ข้อมูล"**
 
-ทางเลือก: `COMBINEVALUES ( " ", DimEmployee[FirstName], DimEmployee[LastName] )` เมื่อต้องการคีย์ประกอบที่ปลอดภัยกว่า
-
----
-
-## Date
-
-คอร์สนี้มี `DimEmployee[BirthDate]` ชนิด Date จาก ETL แล้ว — ใช้ตรง ๆ
-
-ถ้าฝึกประกอบวันที่จากส่วนย่อย:
-
-```dax
-BirthDate (from parts) =
-DATE ( DimEmployee[BirthYear], DimEmployee[BirthMonth], DimEmployee[BirthDay] )
-```
-
-> **Best practice:** คอลัมน์วันที่จริงชนิด Date ที่ ETL ดีกว่าประกอบด้วย DAX ใน production
-
-อย่าใช้ข้อความ `"2024-01-15"` เป็นคอลัมน์วันที่หลักของโมเดล
+**พฤติกรรมทางคณิตศาสตร์ของ BLANK:**
+- ในการคำนวณบวกลบคูณหาร: `BLANK() + 10` จะได้ผลลัพธ์เป็น `10` (ประพฤติตัวเสมือน 0 ชั่วคราว)
+- ในการต่อข้อความ: `BLANK() & "Text"` จะได้ผลลัพธ์เป็น `"Text"`
+- ในการแสดงผลบน Visual: แถวที่มีค่าเป็น `BLANK()` จะถูกซ่อนออกจากตารางโดยอัตโนมัติ ช่วยให้รายงานดูสะอาดตา ไม่แสดงแถวที่ไม่มีข้อมูลให้รกสายตา
 
 ---
 
-## Lab 06 — Logical / Text / Date (โจทย์ + เฉลย)
+## Lab 06 — สร้างคอลัมน์ตัดเกรดและจัดรูปแบบ (โจทย์ + เฉลย)
 
-### โจทย์
+### โจทย์ปฏิบัติ
+1. ในตาราง `DimProduct` สร้าง Calculated Column ชื่อ `PriceTier` เพื่อแบ่งกลุ่มสินค้าระดับราคา:
+   - ต่ำกว่า 20: `"Budget"`
+   - ต่ำกว่า 50: `"Standard"`
+   - ตั้งแต่ 50 ขึ้นไป: `"Premium"`
+2. ในตาราง `DimDate` สร้าง Calculated Column ชื่อ `YearMonth` โดยใช้ฟังก์ชัน `FORMAT` ในรูปแบบ `"YYYY-MM"`
+3. นำ `PriceTier` ไปสร้างเป็น Slicer และทดสอบกรองยอดขาย `[Sales Amount]`
 
-1. คอลัมน์ `Reorder` บน DimProduct
-2. คอลัมน์ `PromotionFlag` จาก `LEFT ( ProductCode )`
-3. คอลัมน์ `Employee Full`
-4. Visual นับสินค้าที่ `Reorder = "Reorder"` (Card หรือตาราง)
-
-### เฉลย
-
+### เฉลยสูตร
 ```dax
-Reorder =
-IF (
-    DimProduct[UnitsInStock] <= DimProduct[ReorderLevel]
-        && DimProduct[Status] = "Active",
-    "Reorder",
-    "OK"
+// 1. ตาราง DimProduct
+PriceTier =
+SWITCH (
+    TRUE (),
+    DimProduct[ListPrice] < 20, "Budget",
+    DimProduct[ListPrice] < 50, "Standard",
+    "Premium"
 )
 
-PromotionFlag =
-IF ( INT ( LEFT ( DimProduct[ProductCode], 1 ) ) IN { 1, 8 }, 0.2, 0 )
-
-Employee Full = DimEmployee[FirstName] & " " & DimEmployee[LastName]
+// 2. ตาราง DimDate
+YearMonth = FORMAT ( DimDate[Date], "YYYY-MM" )
 ```
 
-นับสินค้า Reorder: ใส่ slicer/filter `Reorder = Reorder` แล้ว Card ของ `DISTINCTCOUNT ( DimProduct[ProductKey] )` หรือ measure ชั่วคราว
-
-### เกณฑ์ผ่าน
-
-- สูตร qualify `DimProduct[...]` / `DimEmployee[...]` ครบ
-- Visual แยกสินค้าที่ต้องสั่งซื้อเพิ่มได้
+### เกณฑ์การผ่านประเมิน (Pass Criteria)
+- คอลัมน์ `PriceTier` ให้ผลลัพธ์ตรงตามเงื่อนไขราคาของสินค้าทุกชิ้น
+- สามารถใช้ Slicer `PriceTier` กรองยอดขายในตารางได้อย่างสมบูรณ์
 
 ---
 
-**ถัดไป:** [07 — RELATED และ Relationships](07-related-and-relationships.md)
+**บทเรียนถัดไป:** [07 — RELATED และ Relationships](07-related-and-relationships.md)
