@@ -1,6 +1,6 @@
 # Power BI DAX — Northwind DW Curriculum (DataFabric Academy)
 
-หลักสูตร DAX ที่สอนตามโครงเรื่อง 9EXPERT Version 22 แต่สร้าง **นิสัย semantic model ที่ถูกตั้งแต่ต้น** ด้วย Northwind star schema พร้อมคำอธิบายแบบ **Mental Model (ภาพจำในใจ)** ที่ช่วยให้ผู้เรียนทุกระดับ (เทียบเท่ามัธยมปลายเข้าใจได้ทันที) โดยยังคงรักษามาตรฐานทางเทคนิคระดับมืออาชีพสำหรับ Data Analyst, Business Analyst และ BI Developer ไว้อย่างครบถ้วน
+หลักสูตร DAX ที่สร้างบน **semantic model ที่ถูกต้องตั้งแต่ต้น** ด้วย Northwind star schema พร้อมคำอธิบายแบบ **Mental Model (ภาพจำในใจ)** ที่ช่วยให้ผู้เรียนทุกระดับ (เทียบเท่ามัธยมปลายเข้าใจได้ทันที) โดยยังคงรักษามาตรฐานทางเทคนิคระดับมืออาชีพสำหรับ Data Analyst, Business Analyst และ BI Developer ไว้อย่างครบถ้วน
 
 > 💡 **แผนผังภาพจำในใจ (Mental Model Cheatsheet):**  
 > - **Star Schema:** ดวงอาทิตย์ (Fact บันทึกธุรกรรมซ้ำๆ) ล้อมรอบด้วยดาวเคราะห์บริวาร (Dimension สมุดทะเบียนอ้างอิง)  
